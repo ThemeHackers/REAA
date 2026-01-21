@@ -8,16 +8,16 @@ This tool gives security researchers an AI chat interface that can drive Ghidra 
 docker run --rm -p 9090:9090 -v $(pwd)/data:/data/ghidra_projects biniamfd/ghidra-headless-rest:latest
 ```
 ## Headless Ghidra endpoints (at GHIDRA_API_BASE = http://localhost:9090)
- endpoint | description 
- ---|---
-/tools/analyze | Upload a base64-encoded binary and start headless Ghidra analysis. 
-/tools/status | Get status for an existing analysis job.
-/tools/list_functions | Retrieve the list of discovered functions for a job.
-/tools/decompile_function | Get decompiled pseudocode for a function at a given address.
-/tools/get_xrefs | Get callers and callees for a function (cross-references).
-/tools/list_imports | List imported libraries and symbols for the binary.
-/tools/list_strings | Return printable strings extracted from the binary.
-/tools/query_artifacts | Simple natural-language-like query over artifacts (function names, decompiled snippets).
+| Endpoint                    | Method | Description                                                        | Parameters                                                                                                                 | Returns                                                                                     |
+| --------------------------- | ------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `/tools/analyze`            | POST   | Upload a base64-encoded binary and start headless Ghidra analysis. | **file_b64** *(string, required)* – Base64-encoded binary<br>**filename** *(string, required)* – Original filename         | **job_id** *(string)* – Analysis job identifier                                             |
+| `/tools/status`             | POST   | Get status for an existing analysis job.                           | **job_id** *(string, required)* – Analysis job identifier                                                                  | **job_id** *(string)*<br>**status** *(string)* – `queued \| running \| completed \| failed` |
+| `/tools/list_functions`     | POST   | Retrieve the list of discovered functions for a job.               | **job_id** *(string, required)* – Analysis job identifier                                                                  | **functions** *(array)* – List of `{ name: string, address: string }`                       |
+| `/tools/decompile_function` | POST   | Get decompiled pseudocode for a function at a given address.       | **job_id** *(string, required)* – Analysis job identifier<br>**addr** *(string, required)* – Function address (hex string) | **address** *(string)*<br>**pseudocode** *(string)* – Decompiled C-like code                |
+| `/tools/get_xrefs`          | POST   | Get callers and callees for a function (cross-references).         | **job_id** *(string, required)* – Analysis job identifier<br>**addr** *(string, required)* – Function address              | **address** *(string)*<br>**callers** *(string[])*<br>**callees** *(string[])*              |
+| `/tools/list_imports`       | POST   | List imported libraries and symbols for the binary.                | **job_id** *(string, required)* – Analysis job identifier                                                                  | **imports** *(array)* – List of `{ library: string, symbol: string }`                       |
+| `/tools/list_strings`       | POST   | Return printable strings extracted from the binary.                | **job_id** *(string, required)* – Analysis job identifier<br>**min_length** *(integer, optional)* – Minimum string length  | **strings** *(string[])*                                                                    |
+| `/tools/query_artifacts`    | POST   | Natural-language-style query over artifacts.                       | **job_id** *(string, required)* – Analysis job identifier<br>**query** *(string, required)* – Query text                   | **results** *(array)* – Matching functions / snippets                                       |
 
 ## Architecture
 <img width="916" height="651" alt="image" src="https://github.com/user-attachments/assets/4e75fdca-fc5f-4da2-823e-05d209e2c6b2" />
