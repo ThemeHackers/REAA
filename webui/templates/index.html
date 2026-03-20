@@ -7,6 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,6 +37,77 @@
         input::placeholder, textarea::placeholder {
             color: #9ca3af;
         }
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+            font-size: 0.9em;
+        }
+        .markdown-content th, .markdown-content td {
+            border: 1px solid #4b5563;
+            padding: 0.5em;
+            text-align: left;
+        }
+        .markdown-content th {
+            background-color: #374151;
+            font-weight: 600;
+        }
+        .markdown-content tr:nth-child(even) {
+            background-color: rgba(255,255,255,0.02);
+        }
+        .markdown-content pre {
+            background-color: #161b22;
+            padding: 1em;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1em 0;
+            border: 1px solid #30363d;
+        }
+        .markdown-content code {
+            font-family: 'ui-monospace', 'SFMono-Regular', 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+            background-color: rgba(110, 118, 129, 0.4);
+            padding: 0.2em 0.4em;
+            border-radius: 0.25rem;
+            font-size: 0.9em;
+        }
+        .markdown-content pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            color: inherit;
+        }
+        .markdown-content blockquote {
+            border-left: 4px solid #6366f1;
+            padding-left: 1em;
+            color: #9ca3af;
+            margin: 1em 0;
+            background-color: rgba(99, 102, 241, 0.1);
+            padding: 0.5em 1em;
+            border-radius: 0 0.25rem 0.25rem 0;
+        }
+        .markdown-content ul {
+            list-style-type: disc;
+            padding-left: 1.5em;
+            margin: 1em 0;
+        }
+        .markdown-content ol {
+            list-style-type: decimal;
+            padding-left: 1.5em;
+            margin: 1em 0;
+        }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4 {
+            font-weight: 600;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            color: #f3f4f6;
+            line-height: 1.25;
+        }
+        .markdown-content h1 { font-size: 1.5em; border-bottom: 1px solid #374151; padding-bottom: 0.3em; }
+        .markdown-content h2 { font-size: 1.3em; border-bottom: 1px solid #374151; padding-bottom: 0.3em; }
+        .markdown-content h3 { font-size: 1.1em; }
+        .markdown-content a { color: #60a5fa; text-decoration: none; }
+        .markdown-content a:hover { text-decoration: underline; }
+        .markdown-content .mermaid { background-color: transparent; margin: 1em 0; text-align: center; }
     </style>
 </head>
 <body class="flex h-screen">
@@ -70,6 +144,34 @@
 $(document).ready(function() {
     let currentJobId = null;
     let jobStatusPollers = {};
+
+    mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+    $.get('/jobs', function(data) {
+        if (Array.isArray(data)) {
+            data.forEach(job => {
+                renderJobItem(job);
+            });
+        }
+    });
+
+    function renderJobItem(job) {
+        const { job_id, status, filename, created_at } = job;
+        const name = filename || "Unknown Binary";
+        const dateStr = created_at ? new Date(created_at * 1000).toLocaleString() : "";
+        const newJobHtml = `
+            <div id="job-${job_id}" class="job-item p-3 bg-gray-800 hover:bg-gray-700 rounded-md cursor-pointer transition" data-job-id="${job_id}">
+                <div class="font-medium truncate text-gray-200">${name}</div>
+                <div class="text-xs text-gray-400">ID: ${job_id.substring(0,8)}... <span class="ml-2">${dateStr}</span></div>
+                <div class="text-xs text-yellow-400 font-mono job-status mt-1">${status.toUpperCase()}</div>
+            </div>`;
+        $('#jobs-list').append(newJobHtml);
+        const $status = $(`#job-${job_id} .job-status`);
+        if (status === 'done') $status.removeClass('text-yellow-400').addClass('text-green-400');
+        else if (status === 'failed') $status.removeClass('text-yellow-400').addClass('text-red-400');
+        else pollStatus(job_id);
+    }
+
     function showUploadStatus(message, isError = false) {
         $('#upload-status').text(message).toggleClass('text-red-400', isError).toggleClass('text-green-400', !isError);
     }
@@ -125,6 +227,62 @@ $(document).ready(function() {
             }
         }, 3000);
     }
+
+    function renderMessage(role, content) {
+        if (role === 'tool' || role === 'system') return;
+        let html = '';
+        if (role === 'user') {
+            html = `
+                <div class="flex justify-end mb-4">
+                    <div class="bg-blue-600 text-white p-3 rounded-lg rounded-br-none max-w-[80%]">
+                        ${content}
+                    </div>
+                </div>`;
+        } else if (role === 'assistant') {
+            html = `
+                <div class="flex justify-start mb-4">
+                    <div class="bg-gray-700 text-gray-200 p-3 rounded-lg rounded-bl-none max-w-[80%] markdown-content">
+                        ${marked.parse(content)}
+                    </div>
+                </div>`;
+        }
+        const $msg = $(html);
+        $('#chat-log').append($msg);
+        $msg.find('code.language-mermaid').each(function(index) {
+            const $code = $(this);
+            const graphDef = $code.text();
+            const $pre = $code.parent();
+            const uniqueId = `mermaid-hist-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            $pre.replaceWith(`<div class="mermaid" id="${uniqueId}">${graphDef}</div>`);
+            try {
+                mermaid.run({ nodes: document.querySelectorAll(`#${uniqueId}`) });
+            } catch(e) { console.error("Mermaid error", e); }
+        });
+        $msg.find('pre code').each(function(i, block) {
+            hljs.highlightElement(block);
+        });
+        $('#chat-log').scrollTop($('#chat-log')[0].scrollHeight);
+    }
+
+    function loadJob(jobId) {
+        currentJobId = jobId;
+        $('#chat-log').empty();
+        $('#welcome-message').hide();
+        $('#chat-container').removeClass('hidden').addClass('flex');
+        $('.job-item').removeClass('bg-gray-700');
+        $(`#job-${jobId}`).addClass('bg-gray-700');
+        $('#chat-input, #chat-form button').prop('disabled', false);
+        $('#chat-input').focus();
+        $.get(`/chat/history/${jobId}`, function(history) {
+            if (Array.isArray(history)) {
+                history.forEach(msg => {
+                    renderMessage(msg.role, msg.content);
+                });
+            }
+            renderMessage('assistant', `Connected to job ${currentJobId}. Awaiting command...`);
+        });
+    }
+
     $('#upload-form').on('submit', function(e) {
         e.preventDefault();
         const fileInput = $('#file-input')[0];
@@ -165,15 +323,8 @@ $(document).ready(function() {
         });
     });
     $('#jobs-list').on('click', '.job-item', function() {
-        currentJobId = $(this).data('job-id');
-        $('.job-item').removeClass('bg-gray-700');
-        $(this).addClass('bg-gray-700');
-        $('#welcome-message').hide();
-        $('#chat-container').removeClass('hidden').addClass('flex');
-        $('#chat-input, #chat-form button').prop('disabled', false);
-        $('#chat-log').html('');
-        addChatMessage('assistant', `Connected to job ${currentJobId}. Awaiting command...`);
-        $('#chat-input').focus();
+        const jobId = $(this).data('job-id');
+        loadJob(jobId);
     });
     $('#chat-input').on('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -195,7 +346,7 @@ $(document).ready(function() {
         const placeholderId = addShimmerPlaceholder();
         const $placeholder = $(`#${placeholderId}`);
         const $responseContainer = $placeholder.find('.p-3');
-        
+
         let fullResponse = "";
         let toolCallsHtml = "";
         fetch('/chat', {
@@ -223,7 +374,21 @@ $(document).ready(function() {
                                 const data = JSON.parse(line.substring(6));
                                 if (data.type === 'token') {
                                     fullResponse += data.content;
-                                    $responseContainer.find('.markdown-content').html(marked.parse(fullResponse));
+                                    const $content = $responseContainer.find('.markdown-content');
+                                    $content.html(marked.parse(fullResponse));
+                                    $content.find('code.language-mermaid').each(function(index) {
+                                        const $code = $(this);
+                                        const graphDef = $code.text();
+                                        const $pre = $code.parent();
+                                        const uniqueId = `mermaid-${Date.now()}-${index}`;
+                                        $pre.replaceWith(`<div class="mermaid" id="${uniqueId}">${graphDef}</div>`);
+                                        try {
+                                           mermaid.run({ nodes: document.querySelectorAll(`#${uniqueId}`) });
+                                        } catch(e) { console.error("Mermaid error", e); }
+                                    });
+                                    $content.find('pre code').each(function(i, block) {
+                                        hljs.highlightElement(block);
+                                    });
                                 } else if (data.type === 'tool_call') {
                                     toolCallsHtml += `<li>${data.description}</li>`;
                                     $responseContainer.find('.tool-calls').html(`<div class="text-xs text-gray-400 mt-2 bg-gray-900 p-2 rounded border border-gray-700"><strong>SYSTEM LOG:</strong><ul>${toolCallsHtml}</ul></div>`);
