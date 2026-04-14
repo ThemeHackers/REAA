@@ -5,7 +5,7 @@ from typing import Dict, Any, Generator
 from openai import OpenAI
 from model import model_manager
 
-GHIDRA_API_BASE = "http://localhost:8000"
+GHIDRA_API_BASE = "http://127.0.0.1:8000"
 
 SYSTEM_PROMPT = """You are an expert reverse engineering analyst specializing in binary analysis, disassembly, and malware analysis. Your expertise includes:
 
