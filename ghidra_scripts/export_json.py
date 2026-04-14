@@ -30,6 +30,14 @@ if not os.path.exists(output_dir):
 print(f"Exporting analysis results to: {output_dir}")
 
 
+pseudocode_dir = os.path.join(output_dir, "pseudocode")
+if not os.path.exists(pseudocode_dir):
+    try:
+        os.makedirs(pseudocode_dir)
+    except Exception as e:
+        print(f"Error creating pseudocode directory {pseudocode_dir}: {e}")
+        pseudocode_dir = None
+
 program = getCurrentProgram()
 monitor = monitor
 listing = program.getListing()
@@ -243,7 +251,10 @@ for func in function_manager.getFunctions(True):
                 decompiled = decompiler_interface.decompileFunction(func, 30, monitor)
                 if decompiled:
                     func_addr = hex(func.getEntryPoint().getOffset())
-                    decompile_file = os.path.join(output_dir, f"decompile_{func_addr}.c")
+                    if pseudocode_dir:
+                        decompile_file = os.path.join(pseudocode_dir, f"{func_addr}.c")
+                    else:
+                        decompile_file = os.path.join(output_dir, f"decompile_{func_addr}.c")
                     with open(decompile_file, 'w') as f:
                         f.write(decompiled.getDecompiledFunction().getC())
                     print(f"Decompiled {func.getName()} to {decompile_file}")

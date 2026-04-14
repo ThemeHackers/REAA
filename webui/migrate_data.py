@@ -48,11 +48,11 @@ def migrate_jobs():
             
             job = Job(
                 id=job_id,
-                user_id='system',  # Default to system user for migrated jobs
+                user_id='system', 
                 filename=status_data.get('filename', 'Unknown'),
                 file_path=job_path,
                 status=status_data.get('status', 'unknown'),
-                priority=5,  # Default priority
+                priority=5,  
                 file_size=status_data.get('file_size'),
                 created_at=datetime.datetime.fromtimestamp(status_data.get('created_at', 0)) if status_data.get('created_at') else datetime.datetime.utcnow(),
                 error_message=status_data.get('error_message')
@@ -109,21 +109,25 @@ def create_default_admin():
     """Create default admin user"""
     from models import User
     
-    admin = User.query.filter_by(username='admin').first()
+    admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+    admin_email = os.getenv('ADMIN_EMAIL', 'admin@ai-reverse-engineering.local')
+    admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
+    
+    admin = User.query.filter_by(username=admin_username).first()
     if admin:
         print("Admin user already exists")
         return
     
     admin = User(
-        username='admin',
-        email='admin@ai-reverse-engineering.local',
+        username=admin_username,
+        email=admin_email,
         role='admin'
     )
-    admin.set_password('admin123')
+    admin.set_password(admin_password)
     
     db.session.add(admin)
     db.session.commit()
-    print("Created default admin user (username: admin, password: admin123)")
+    print(f"Created default admin user (username: {admin_username}, password: {admin_password})")
     print("Please change the default password after first login!")
 
 if __name__ == '__main__':
