@@ -1,0 +1,7 @@
+.env
+.venv
+.windsurf
+data
+webui/__pycache__
+webui/chat
+webui/tests/__pycache__

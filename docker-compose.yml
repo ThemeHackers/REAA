@@ -1,0 +1,98 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ghidra-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  ghidra-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+    container_name: ghidra-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data/ghidra_projects
+      - ./core:/app/core
+      - ./ghidra_scripts:/app/ghidra_scripts
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - GHIDRA_HOME=/opt/ghidra
+      - GHIDRA_SCRIPTS=/app/ghidra_scripts
+      - DATA_DIR=/data/ghidra_projects
+      - MAX_UPLOAD_SIZE=209715200
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+    container_name: ghidra-celery-worker
+    restart: unless-stopped
+    command: celery -A core.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./data:/data/ghidra_projects
+      - ./core:/app/core
+      - ./ghidra_scripts:/app/ghidra_scripts
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - GHIDRA_HOME=/opt/ghidra
+      - GHIDRA_SCRIPTS=/app/ghidra_scripts
+      - DATA_DIR=/data/ghidra_projects
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+    container_name: ghidra-celery-beat
+    restart: unless-stopped
+    command: celery -A core.celery_app beat --loglevel=info
+    volumes:
+      - ./core:/app/core
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: ghidra-network

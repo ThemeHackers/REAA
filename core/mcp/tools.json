@@ -1,0 +1,209 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "analyze",
+      "description": "Upload a base64-encoded binary and start headless Ghidra analysis. Returns job_id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_b64": {
+            "type": "string",
+            "description": "Base64-encoded binary contents"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename (for type hints)"
+          },
+          "persist": {
+            "type": "boolean",
+            "description": "If true, keep artifacts longer"
+          }
+        },
+        "required": [
+          "file_b64",
+          "filename"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "status",
+      "description": "Get status for an existing analysis job.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_functions",
+      "description": "Retrieve a paginated list of discovered functions for a job. Use offset/limit to page through results.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Start index (default 0)"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max items to return (default 100)"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "decompile_function",
+      "description": "Get decompiled pseudocode for a function at a given address.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "addr": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "addr"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_xrefs",
+      "description": "Get callers and callees for a function (addresses and names).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "addr": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "addr"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_imports",
+      "description": "List imported libraries and symbols for the binary.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_strings",
+      "description": "Return printable strings extracted from the binary (with offsets).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "min_length": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "hexdump_range",
+      "description": "Return hex bytes for an address range or file offset range.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "length": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "start",
+          "length"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "query_artifacts",
+      "description": "Simple natural-language-like query over exported artifacts (function names, decompiled snippets).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "regex": {
+            "type": "boolean",
+            "description": "Enable regex search (default false)"
+          }
+        },
+        "required": [
+          "job_id",
+          "query"
+        ]
+      }
+    }
+  }
+]

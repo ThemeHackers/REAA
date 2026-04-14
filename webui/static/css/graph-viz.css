@@ -1,0 +1,135 @@
+
+#graph-container {
+    width: 100%;
+    height: 100%;
+    background-color: #1a1d23;
+    border-radius: 0.5rem;
+}
+
+#graph-tooltip {
+    z-index: 10000;
+}
+
+.remote-cursor {
+    pointer-events: none;
+    transition: all 0.1s ease-out;
+}
+
+.cursor-pointer {
+    position: relative;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.cursor-label {
+    position: absolute;
+    top: 20px;
+    left: 15px;
+    white-space: nowrap;
+    font-weight: 500;
+    font-size: 11px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.cursor-selection {
+    pointer-events: none;
+    transition: all 0.2s ease-out;
+}
+
+.selection-tooltip {
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.scroll-indicator {
+    transition: all 0.3s ease-out;
+}
+
+.node-indicator {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+#graph-viz-modal {
+    backdrop-filter: blur(4px);
+}
+
+#graph-viz-modal .bg-gray-800 {
+    background: linear-gradient(135deg, #1a1d23 0%, #161b22 100%);
+}
+
+#graph-filter-input {
+    transition: all 0.2s ease;
+}
+
+#graph-filter-input:focus {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+}
+
+#graph-layout-select {
+    transition: all 0.2s ease;
+}
+
+#graph-layout-select:focus {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+}
+
+#graph-fit-btn, #graph-export-btn {
+    transition: all 0.2s ease;
+}
+
+#graph-fit-btn:hover, #graph-export-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.cy-node {
+    transition: all 0.2s ease;
+}
+
+.cy-node:selected {
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.8));
+}
+
+.cy-edge {
+    transition: all 0.2s ease;
+}
+
+.cy-edge:selected {
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.8));
+}
+
+@media (max-width: 768px) {
+    #graph-viz-modal .max-w-7xl {
+        max-width: 95vw;
+        height: 95vh;
+    }
+    
+    #graph-viz-modal .flex.items-center.justify-between {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+    
+    #graph-viz-modal .flex.items-center.gap-3 {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    
+    #graph-filter-input, #graph-layout-select {
+        flex: 1;
+        min-width: 120px;
+    }
+}

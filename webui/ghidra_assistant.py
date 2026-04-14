@@ -1,22 +1,65 @@
-# Biniam Demissie
-# 09/29/2025
 import os
 import json
 import requests
 from typing import Dict, Any, Generator
 from openai import OpenAI
+from model import model_manager
 
-GHIDRA_API_BASE = "http://localhost:9090"
+GHIDRA_API_BASE = "http://localhost:8000"
 
-SYSTEM_PROMPT = "You are a helpful reverse engineering assistant. You have access to a set of tools to analyze a binary identified by a job_id. When the user asks a question, use the available tools to find the answer. If something is not clear, ask for clarification before answering. Format your final response in Markdown. You can generate Call Graphs or Flowcharts using Mermaid.js syntax (wrap in ```mermaid code block) to visualize function relationships or logic flow."
+SYSTEM_PROMPT = """You are an expert reverse engineering analyst specializing in binary analysis, disassembly, and malware analysis. Your expertise includes:
+
+- Binary file analysis (PE, ELF, Mach-O formats)
+- Assembly language analysis (x86, x64, ARM, MIPS)
+- Decompilation and pseudocode interpretation
+- Control flow and data flow analysis
+- Function call graph analysis
+- String and symbol analysis
+- Memory layout and address space analysis
+- Anti-debugging and obfuscation techniques
+- Binary instrumentation and patching
+
+Analysis Approach:
+1. Identify binary format, architecture, and entry points
+2. Analyze main functions and control flow
+3. Examine imported/exported symbols and dependencies
+4. Search for interesting strings and data patterns
+5. Analyze memory management and data structures
+6. Identify key algorithms and cryptographic operations
+7. Map function relationships and call graphs
+8. Assess binary behavior and purpose
+
+CRITICAL INSTRUCTIONS:
+- When user asks about a SPECIFIC function (by name or address), ALWAYS use decompile_function to analyze that specific function
+- When user shows specific decompiled code or assembly, analyze THAT specific code, not other functions
+- Do NOT provide generic responses about overall structure when asked about specific functions
+- Focus your analysis on the exact function or code the user is asking about
+- Use decompile_function with the specific address when analyzing individual functions
+- Only use list_functions when asked for an overview of ALL functions in the binary
+
+Response Guidelines:
+- Provide clear, technical explanations
+- Use proper assembly and reverse engineering terminology
+- Include specific addresses, offsets, and function names when relevant
+- Explain the purpose and behavior of analyzed code
+- Identify potential security implications when applicable
+- Format responses in clean Markdown without diagrams or charts
+- Be precise with technical details and avoid speculation
+
+When analyzing code:
+- Explain what each instruction or function does
+- Identify data flow and control flow patterns
+- Point out suspicious or interesting behavior
+- Relate findings to overall binary functionality
+- Provide context for why certain code patterns exist"""
 MAX_AGENT_TURNS = 5
 
 TOOLS = [
   { "type": "function", "function": { "name": "analyze", "description": "Upload a base64-encoded binary and start headless Ghidra analysis. Returns job_id.", "parameters": { "type": "object", "properties": { "file_b64": {"type": "string"}, "filename": {"type": "string"}}, "required": ["file_b64", "filename"] }}},
   { "type": "function", "function": { "name": "status", "description": "Get status for an existing analysis job.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"} }, "required": ["job_id"] }}},
-  { "type": "function", "function": { "name": "list_functions", "description": "Retrieve a paginated list of discovered functions for a job. Use offset/limit to page through results.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "offset": {"type": "integer"}, "limit": {"type": "integer"} }, "required": ["job_id"] }}},
-  { "type": "function", "function": { "name": "decompile_function", "description": "Get decompiled pseudocode for a function at a given address.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "addr": {"type": "string"} }, "required": ["job_id", "addr"] }}},
-  { "type": "function", "function": { "name": "get_xrefs", "description": "Get callers and callees for a function (cross-references).", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "addr": {"type": "string"} }, "required": ["job_id", "addr"] }}},
+  { "type": "function", "function": { "name": "list_functions", "description": "Retrieve a paginated list of discovered functions for a job. Use this to get an overview of available functions, then use decompile_function to analyze specific functions in detail. Use offset/limit to page through results.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "offset": {"type": "integer"}, "limit": {"type": "integer"} }, "required": ["job_id"] }}},
+  { "type": "function", "function": { "name": "decompile_function", "description": "Get decompiled pseudocode for a specific function at a given address. Use this to analyze individual functions in detail. Always decompile specific functions when asked about particular function behavior.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "addr": {"type": "string"} }, "required": ["job_id", "addr"] }}},
+  { "type": "function", "function": { "name": "get_xrefs", "description": "Get callers and callees for a specific function (cross-references). Use this to understand function relationships and call graphs.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "addr": {"type": "string"} }, "required": ["job_id", "addr"] }}},
   { "type": "function", "function": { "name": "list_imports", "description": "List imported libraries and symbols for the binary.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"} }, "required": ["job_id"] }}},
   { "type": "function", "function": { "name": "list_strings", "description": "Return printable strings extracted from the binary.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "min_length": {"type": "integer"} }, "required": ["job_id"] }}},
   { "type": "function", "function": { "name": "query_artifacts", "description": "Search artifacts (functions, strings) for a pattern. Supports regex.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "query": {"type": "string"}, "regex": {"type": "boolean"} }, "required": ["job_id", "query"] }}}
@@ -34,7 +77,33 @@ TOOL_INTENT_DESCRIPTIONS = {
 
 def call_ghidra_tool(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        response = requests.post(f"{GHIDRA_API_BASE}/tools/{endpoint}", json=payload)
+        job_id = payload.get("job_id", "")
+        if endpoint == "analyze":
+            url = f"{GHIDRA_API_BASE}/tools/analyze"
+        elif endpoint == "list_functions":
+            url = f"{GHIDRA_API_BASE}/tools/list_functions"
+        elif endpoint == "list_imports":
+            url = f"{GHIDRA_API_BASE}/tools/list_imports"
+        elif endpoint == "list_strings":
+            url = f"{GHIDRA_API_BASE}/tools/list_strings"
+        elif endpoint == "decompile_function":
+            addr = payload.get("addr", "")
+            url = f"{GHIDRA_API_BASE}/tools/decompile_function"
+        elif endpoint == "get_xrefs":
+            addr = payload.get("addr", "")
+            url = f"{GHIDRA_API_BASE}/tools/get_xrefs"
+        elif endpoint == "query_artifacts":
+            url = f"{GHIDRA_API_BASE}/tools/query_artifacts"
+        else:
+            url = f"{GHIDRA_API_BASE}/tools/{endpoint}"
+        
+        if endpoint in ["list_functions", "list_imports", "list_strings"]:
+            response = requests.get(url, params=payload)
+        elif endpoint in ["analyze", "query_artifacts"]:
+            response = requests.post(url, json=payload)
+        else:
+            response = requests.get(url)
+        
         response.raise_for_status()
         try:
             return response.json()
@@ -45,12 +114,8 @@ def call_ghidra_tool(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 class GhidraAssistant:
     def __init__(self):
-        self.client = OpenAI(
-           # e.g., https://api.openai.com/v1
-           base_url=os.getenv("API_BASE"),
-           api_key=os.getenv("API_KEY", "not-used")
-        )
-        self.model = os.getenv("MODEL_NAME")
+        self.client = model_manager.client
+        self.model = model_manager.model
 
         self.available_tools = {
             "status": lambda **kwargs: call_ghidra_tool("status", kwargs),
@@ -83,6 +148,17 @@ class GhidraAssistant:
         chat_file = self._get_chat_file(job_id)
         with open(chat_file, 'w') as f:
             json.dump(messages, f, indent=2)
+
+    def clear_history(self, job_id: str) -> bool:
+        """Clear chat history for a specific job"""
+        chat_file = self._get_chat_file(job_id)
+        if os.path.exists(chat_file):
+            try:
+                os.remove(chat_file)
+                return True
+            except Exception:
+                return False
+        return True
 
     def chat_completion_stream(self, user_message: str, job_id: str) -> Generator[str, None, None]:
         history = self.load_history(job_id)
@@ -175,3 +251,21 @@ class GhidraAssistant:
                 serializable_history.append(d)
 
         self.save_history(job_id, serializable_history)
+
+    def analyze_code(self, prompt: str, job_id: str = None) -> str:
+        """Analyze code without streaming - for direct code analysis requests"""
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        
+        if job_id:
+            messages.append({"role": "user", "content": f"[Job ID: {job_id}] {prompt}"})
+        else:
+            messages.append({"role": "user", "content": prompt})
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Error analyzing code: {str(e)}"

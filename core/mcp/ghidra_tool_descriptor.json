@@ -1,0 +1,17 @@
+{
+  "name": "ghidra-headless-service-local",
+  "description": "Local headless Ghidra REST service (upload binary, list functions, decompile). For air-gapped, same-machine training labs.",
+  "version": "0.2",
+  "base_url": "http://127.0.0.1:8000",
+  "endpoints": [
+    { "id": "analyze",   "method": "POST", "path": "/analyze", "description": "Upload a binary and start analysis. Returns job_id." },
+    { "id": "status",    "method": "GET",  "path": "/status/{job_id}", "description": "Get status for job_id." },
+    { "id": "functions", "method": "GET",  "path": "/results/{job_id}/functions", "description": "List functions found in analysis." },
+    { "id": "decompile", "method": "GET",  "path": "/results/{job_id}/function/{addr}/decompile", "description": "Decompiled pseudocode for function at address {addr}." },
+    { "id": "xrefs",     "method": "GET",  "path": "/results/{job_id}/xrefs/{addr}", "description": "Callers and callees for function at {addr}." },
+    { "id": "imports",   "method": "GET",  "path": "/results/{job_id}/imports", "description": "Imported symbols and libraries." },
+    { "id": "strings",   "method": "GET",  "path": "/results/{job_id}/strings", "description": "Extracted printable strings from the binary." },
+    { "id": "query",     "method": "POST", "path": "/query", "description": "Simple NL query over exported artifacts (training/demo)." },
+    { "id": "tools",     "method": "GET",  "path": "/mcp/tools", "description": "OpenAI-style tool definitions for LLM calls." }
+  ]
+}
