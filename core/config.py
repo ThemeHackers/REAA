@@ -9,6 +9,12 @@ from pathlib import Path
 class Settings(BaseSettings):
     """Application settings"""
     
+    API_KEY: str = ""
+    API_BASE: str = ""
+    MODEL_NAME: str = ""
+    ADMIN_USERNAME: str = ""
+    ADMIN_EMAIL: str = ""
+    ADMIN_PASSWORD: str = ""
 
     GHIDRA_HOME: str = "/opt/ghidra"
     GHIDRA_VERSION: str = "12.0.4"
