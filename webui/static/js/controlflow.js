@@ -1,4 +1,11 @@
 $(document).ready(function() {
+    
+    if (typeof d3 === 'undefined') {
+        console.error('D3.js is not loaded. Control flow visualization will not work.');
+        $('#controlflow-container').html('<div class="text-center text-red-500 py-8">D3.js library is required but not loaded</div>');
+        return;
+    }
+
     let currentJobId = null;
     let currentFunctionAddress = null;
     let controlFlowData = null;
@@ -199,7 +206,7 @@ $(document).ready(function() {
 
         if (blocks.length === 0) return;
 
-        const width = container.width();
+        const width = container.width() || 800;
         const height = 384;
         const layoutAlgorithm = $('#cf-layout-algorithm').val() || 'force';
         svg = d3.select('#cf-graph-container')
@@ -284,7 +291,7 @@ $(document).ready(function() {
             .attr('stroke', '#fff')
             .attr('stroke-width', 2);
         node.append('text')
-            .text(d => d.address ? d.address.substring(0, 6) : 'N/A')
+            .text(d => d.address ? '0x' + d.address.toString(16).substring(2, 8) : 'N/A')
             .attr('x', 30)
             .attr('y', 18)
             .attr('text-anchor', 'middle')
@@ -461,7 +468,16 @@ $(document).ready(function() {
                 link.click();
             };
             
-            img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+            img.onerror = function() {
+                showToast('Failed to convert SVG to PNG', 'error');
+            };
+            
+            try {
+                const base64Svg = btoa(unescape(encodeURIComponent(svgData)));
+                img.src = 'data:image/svg+xml;base64,' + base64Svg;
+            } catch (e) {
+                showToast('Failed to encode SVG for PNG export', 'error');
+            }
         } else if (format === 'dot') {
             let dotContent = 'digraph controlflow {\n';
             dotContent += '  rankdir=TB;\n';
@@ -499,7 +515,7 @@ $(document).ready(function() {
         }
     }
     function loadFunctionList() {
-        const selector = $('#cf-function-select');
+        const selector = $('#cf-function-selector');
         if (!selector.length) return;
         
         selector.empty();

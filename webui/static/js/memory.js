@@ -32,7 +32,7 @@ $(document).ready(function() {
                         <div class="text-xs text-gray-400">Sections</div>
                     </div>
                     <div class="text-center">
-                        <div class="text-2xl font-bold text-purple-400">${data.base_address.toString(16).toUpperCase()}</div>
+                        <div class="text-2xl font-bold text-purple-400">${data.base_address ? '0x' + data.base_address.toString(16).toUpperCase() : 'N/A'}</div>
                         <div class="text-xs text-gray-400">Base Address</div>
                     </div>
                     <div class="text-center">
@@ -46,6 +46,7 @@ $(document).ready(function() {
         const dataSize = data.sections.filter(s => getSectionType(s.name) === 'data').reduce((sum, s) => sum + s.size, 0);
         const bssSize = data.sections.filter(s => getSectionType(s.name) === 'bss').reduce((sum, s) => sum + s.size, 0);
         const rodataSize = data.sections.filter(s => getSectionType(s.name) === 'rodata').reduce((sum, s) => sum + s.size, 0);
+        const totalSize = data.total_size || 1;
         
         const statsHtml = `
             <div class="memory-stats mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
@@ -53,30 +54,30 @@ $(document).ready(function() {
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div class="text-center">
                         <div class="text-xl font-bold text-green-400">${formatSize(codeSize)}</div>
-                        <div class="text-xs text-gray-400">Code (${((codeSize / data.total_size) * 100).toFixed(1)}%)</div>
+                        <div class="text-xs text-gray-400">Code (${((codeSize / totalSize) * 100).toFixed(1)}%)</div>
                         <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
-                            <div class="bg-green-500 h-2 rounded-full" style="width: ${((codeSize / data.total_size) * 100).toFixed(1)}%"></div>
+                            <div class="bg-green-500 h-2 rounded-full" style="width: ${((codeSize / totalSize) * 100).toFixed(1)}%"></div>
                         </div>
                     </div>
                     <div class="text-center">
                         <div class="text-xl font-bold text-blue-400">${formatSize(dataSize)}</div>
-                        <div class="text-xs text-gray-400">Data (${((dataSize / data.total_size) * 100).toFixed(1)}%)</div>
+                        <div class="text-xs text-gray-400">Data (${((dataSize / totalSize) * 100).toFixed(1)}%)</div>
                         <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
-                            <div class="bg-blue-500 h-2 rounded-full" style="width: ${((dataSize / data.total_size) * 100).toFixed(1)}%"></div>
+                            <div class="bg-blue-500 h-2 rounded-full" style="width: ${((dataSize / totalSize) * 100).toFixed(1)}%"></div>
                         </div>
                     </div>
                     <div class="text-center">
                         <div class="text-xl font-bold text-yellow-400">${formatSize(bssSize)}</div>
-                        <div class="text-xs text-gray-400">BSS (${((bssSize / data.total_size) * 100).toFixed(1)}%)</div>
+                        <div class="text-xs text-gray-400">BSS (${((bssSize / totalSize) * 100).toFixed(1)}%)</div>
                         <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
-                            <div class="bg-yellow-500 h-2 rounded-full" style="width: ${((bssSize / data.total_size) * 100).toFixed(1)}%"></div>
+                            <div class="bg-yellow-500 h-2 rounded-full" style="width: ${((bssSize / totalSize) * 100).toFixed(1)}%"></div>
                         </div>
                     </div>
                     <div class="text-center">
                         <div class="text-xl font-bold text-purple-400">${formatSize(rodataSize)}</div>
-                        <div class="text-xs text-gray-400">Read-Only (${((rodataSize / data.total_size) * 100).toFixed(1)}%)</div>
+                        <div class="text-xs text-gray-400">Read-Only (${((rodataSize / totalSize) * 100).toFixed(1)}%)</div>
                         <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
-                            <div class="bg-purple-500 h-2 rounded-full" style="width: ${((rodataSize / data.total_size) * 100).toFixed(1)}%"></div>
+                            <div class="bg-purple-500 h-2 rounded-full" style="width: ${((rodataSize / totalSize) * 100).toFixed(1)}%"></div>
                         </div>
                     </div>
                 </div>
@@ -85,7 +86,7 @@ $(document).ready(function() {
         const sectionsHtml = data.sections.map((section, index) => {
             const sectionType = getSectionType(section.name);
             const colorClass = getSectionColor(sectionType);
-            const percentage = ((section.size / data.total_size) * 100).toFixed(1);
+            const percentage = ((section.size / totalSize) * 100).toFixed(1);
             const permissions = getPermissionBadges(section.permissions);
 
             return `
@@ -133,8 +134,8 @@ $(document).ready(function() {
                 </div>
                 <div class="memory-map-visual relative h-16 bg-gray-900 rounded-lg overflow-hidden" id="memory-map-container">
                     ${data.sections.map((section, index) => {
-                        const offset = ((section.address - data.base_address) / data.total_size) * 100;
-                        const width = Math.max(0.5, (section.size / data.total_size) * 100);
+                        const offset = data.base_address ? ((section.address - data.base_address) / totalSize) * 100 : 0;
+                        const width = Math.max(0.5, (section.size / totalSize) * 100);
                         const colorClass = getSectionColor(getSectionType(section.name));
                         const permissionIndicator = getPermissionIndicator(section.permissions);
                         
@@ -148,8 +149,8 @@ $(document).ready(function() {
                     }).join('')}
                 </div>
                 <div class="flex justify-between text-xs text-gray-500 mt-2 font-mono">
-                    <span>0x${data.base_address.toString(16).toUpperCase()}</span>
-                    <span>0x${(data.base_address + data.total_size).toString(16).toUpperCase()}</span>
+                    <span>${data.base_address ? '0x' + data.base_address.toString(16).toUpperCase() : 'N/A'}</span>
+                    <span>${data.base_address ? '0x' + (data.base_address + data.total_size).toString(16).toUpperCase() : 'N/A'}</span>
                 </div>
             </div>
         `;
@@ -414,7 +415,7 @@ $(document).ready(function() {
         return colors[type] || colors.unknown;
     }
     function formatSize(bytes) {
-        if (bytes === 0) return '0 B';
+        if (bytes === 0 || bytes === null || bytes === undefined || isNaN(bytes)) return '0 B';
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -500,7 +501,10 @@ $(document).ready(function() {
             const bytes = hexData.bytes || [];
             
             if (searchType === 'hex') {
-                const patternBytes = pattern.split(/\s+/).map(b => parseInt(b, 16));
+                const patternBytes = pattern.split(/\s+/).map(b => {
+                    const parsed = parseInt(b, 16);
+                    return isNaN(parsed) ? null : parsed;
+                }).filter(b => b !== null);
                 for (let i = 0; i <= bytes.length - patternBytes.length; i++) {
                     let match = true;
                     for (let j = 0; j < patternBytes.length; j++) {
@@ -524,7 +528,13 @@ $(document).ready(function() {
                 }
             } else if (searchType === 'regex') {
                 const text = bytes.map(b => String.fromCharCode(b)).join('');
-                const regex = new RegExp(pattern, 'g');
+                let regex;
+                try {
+                    regex = new RegExp(pattern, 'g');
+                } catch (e) {
+                    $('#hex-search-results').text('Invalid regex pattern');
+                    return;
+                }
                 let match;
                 while ((match = regex.exec(text)) !== null) {
                     results.push(match.index);

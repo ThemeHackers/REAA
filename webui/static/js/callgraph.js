@@ -1,4 +1,11 @@
 $(document).ready(function() {
+    
+    if (typeof d3 === 'undefined') {
+        console.error('D3.js is not loaded. Call graph visualization will not work.');
+        $('#callgraph-container').html('<div class="text-center text-red-500 py-8">D3.js library is required but not loaded</div>');
+        return;
+    }
+
     let currentJobId = null;
     let graphData = null;
     let svg = null;
@@ -84,7 +91,7 @@ $(document).ready(function() {
         `;
 
         container.append(minimapHtml);
-        const width = container.width();
+        const width = container.width() || 800;
         const height = 500;
         nodes.forEach(node => {
             node.x = width / 2 + (Math.random() - 0.5) * 50;
@@ -383,7 +390,8 @@ $(document).ready(function() {
             nodesByLevel[level].push(nodeId);
         });
 
-        const levelHeight = height / (Object.keys(nodesByLevel).length || 1);
+        const numLevels = Object.keys(nodesByLevel).length || 1;
+        const levelHeight = height / numLevels;
         Object.keys(nodesByLevel).forEach(level => {
             const levelNodes = nodesByLevel[level];
             const levelWidth = width / (levelNodes.length || 1);
@@ -419,7 +427,7 @@ $(document).ready(function() {
     }
     function renderFilteredGraph(nodes, links) {
         const container = $('#callgraph-container');
-        const width = container.width();
+        const width = container.width() || 800;
         const height = 500;
         const layoutAlgorithm = $('#fg-layout').val() || 'force';
 

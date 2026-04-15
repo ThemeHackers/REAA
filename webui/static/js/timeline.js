@@ -1,4 +1,11 @@
 $(document).ready(function() {
+    
+    if (typeof d3 === 'undefined') {
+        console.error('D3.js is not loaded. Timeline visualization will not work.');
+        $('#timeline-container').html('<div class="text-center text-red-500 py-8">D3.js library is required but not loaded</div>');
+        return;
+    }
+
     let currentJobId = null;
     let timelineData = null;
     let svg = null;
@@ -219,7 +226,7 @@ $(document).ready(function() {
         const timestamps = validEvents.map(e => e.timestamp);
         const minTime = Math.min(...timestamps);
         const maxTime = Math.max(...timestamps);
-        const timeRange = maxTime - minTime || 1;
+        const timeRange = maxTime - minTime || 1000;
         const xScale = d3.scaleLinear()
             .domain([minTime, maxTime])
             .range([50, width - 50]);
@@ -269,7 +276,8 @@ $(document).ready(function() {
 
         events.forEach(event => {
             const x = xScale(event.timestamp);
-            const width = Math.max(50, (event.duration / timeRange) * (xScale.range()[1] - xScale.range()[0]));
+            const safeTimeRange = timeRange || 1000;
+            const width = Math.max(50, (event.duration / safeTimeRange) * (xScale.range()[1] - xScale.range()[0]));
             const y = yScale(event.category) || 100;
 
             const rect = g.append('rect')
@@ -562,8 +570,13 @@ $(document).ready(function() {
     function loadMilestones() {
         const saved = localStorage.getItem(`timeline_milestones_${currentJobId}`);
         if (saved) {
-            customMilestones = JSON.parse(saved);
-            renderMilestones();
+            try {
+                customMilestones = JSON.parse(saved);
+                renderMilestones();
+            } catch (e) {
+                console.error('Failed to parse milestones from localStorage:', e);
+                customMilestones = [];
+            }
         }
     }
     function renderMilestones() {
