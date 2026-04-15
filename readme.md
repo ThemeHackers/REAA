@@ -97,6 +97,17 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 
 ### Windows Native AI Models Setup
 
+**Ollama Models (for Chat & AI):**
+
+Available models for general AI assistance:
+- **qwen3-vl:30b** - 30B parameters, vision-language model (requires 16GB+ VRAM)
+- **qwen3-vl:8b** - 8B parameters, vision-language model (requires 6GB+ VRAM)
+- **qwen3-vl:4b** - 4B parameters, vision-language model (requires 4GB+ VRAM)
+- **qwen3.5:27b** - 27B parameters, general purpose (requires 16GB+ VRAM)
+- **qwen3.5:9b** - 9B parameters, general purpose (requires 6GB+ VRAM)
+- **qwen3.5:4b** - 4B parameters, general purpose (requires 4GB+ VRAM)
+- **llama3.2:3b** - 3B parameters, general purpose (recommended for RTX 2060)
+
 **Ollama Setup (llama3.2:3b):**
 ```bash
 # Install Ollama for Windows
@@ -108,11 +119,31 @@ ollama serve
 # Download llama3.2:3b model
 ollama pull llama3.2:3b
 
+# To use other models, replace with:
+# ollama pull qwen3.5:4b
+# ollama pull qwen3-vl:4b
+
 # Verify
 Invoke-RestMethod -Uri "http://localhost:11434/api/tags"
 # or
 curl http://localhost:11434/api/tags
 ```
+
+**LLM4Decompile Models (for Pseudocode Refinement):**
+
+Available models for decompilation refinement:
+| Model | Size | Re-executability | VRAM Required |
+|-------|------|------------------|---------------|
+| llm4decompile-1.3b-v1.5 | 1.3B | 27.3% | 4GB+ |
+| llm4decompile-6.7b-v1.5 | 6.7B | 45.4% | 8GB+ |
+| llm4decompile-1.3b-v2 | 1.3B | 46.0% | 4GB+ |
+| llm4decompile-6.7b-v2 | 6.7B | 52.7% | 8GB+ |
+| llm4decompile-9b-v2 | 9B | 64.9% | 12GB+ |
+| llm4decompile-22b-v2 | 22B | 63.6% | 24GB+ |
+
+**Note:** Re-executability indicates the percentage of refined code that can be successfully recompiled. Higher values indicate better decompilation accuracy. For RTX 2060 (6GB VRAM), recommended models are:
+- **Ollama**: llama3.2:3b or qwen3.5:4b
+- **LLM4Decompile**: llm4decompile-1.3b-v2 or llm4decompile-6.7b-v2
 
 ### Quick Start
 
@@ -158,6 +189,14 @@ http://127.0.0.1:5000
 API_KEY=ollama
 API_BASE=http://localhost:11434/v1
 MODEL_NAME=llama3.2:3b
+OLLAMA_MAX_TOKENS=4096
+OLLAMA_TEMPERATURE=0.7
+LLM4DECOMPILE_MODEL_PATH=LLM4Binary/llm4decompile-6.7b-v2
+LLM4DECOMPILE_DEVICE=auto
+LLM4DECOMPILE_DTYPE=float16
+LLM4DECOMPILE_MAX_MEMORY={0: "6GB"}
+LLM4DECOMPILE_QUANTIZATION=
+LLM4DECOMPILE_MAX_NEW_TOKENS=2048
 GHIDRA_HOME=/opt/ghidra
 GHIDRA_BIN=/opt/ghidra/support/analyzeHeadless
 GHIDRA_SCRIPTS=/app/ghidra_scripts
@@ -348,3 +387,13 @@ docker-compose restart celery-worker
 - [PyGhidra Documentation](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)
 - [Radare2 Documentation](https://radare.org/)
 - [Celery Documentation](https://docs.celeryproject.org/)
+
+## 🙏 Acknowledgments & Inspirations
+
+This project is inspired by and builds upon the work of several innovative projects in the AI-powered reverse engineering space:
+
+- **[ai-reverse-engineering](https://github.com/biniamf/ai-reverse-engineering)** by biniamf - Pioneering the integration of AI models with reverse engineering workflows
+- **[r2dec-js](https://github.com/wargio/r2dec-js)** by wargio - Advanced decompiler implementation for Radare2 with JavaScript-based analysis
+- **[LLM4Decompile](https://github.com/albertan017/LLM4Decompile)** by albertan017 - Leveraging Large Language Models for decompilation and pseudocode refinement
+
+These projects have demonstrated the potential of combining traditional reverse engineering tools with modern AI techniques, paving the way for more intelligent and automated analysis workflows. REAA aims to extend these concepts by integrating multiple tools (Ghidra, Radare2) and AI models (Ollama, LLM4Decompile) into a unified platform for comprehensive malware analysis and security research.
