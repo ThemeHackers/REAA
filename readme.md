@@ -34,11 +34,11 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                   Windows Native (GPU)                      │
-│  ┌─────────────┐      ┌──────────────────┐                 │
-│  │   Ollama    │      │ llm4decompile    │                 │
-│  │ (llama3.2)  │      │    (1.3B-v2)     │                 │
-│  │  RTX 2060   │      │    RTX 2060      │                 │
-│  └─────────────┘      └──────────────────┘                 │
+│  ┌─────────────┐      ┌──────────────────┐                  │
+│  │   Ollama    │      │ llm4decompile    │                  │
+│  │ (llama3.2)  │      │    (1.3B-v2)     │                  │
+│  │  RTX 2060   │      │    RTX 2060      │                  │
+│  └─────────────┘      └──────────────────┘                  │
 └─────────────────────────────────────────────────────────────┘
         │                         │
         │ http://localhost:11434   │ Direct PyTorch
@@ -47,11 +47,11 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
                    │
                    ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Docker (Ghidra API)                       │
-│  ┌─────────────┐      ┌─────────────┐      ┌──────────────┐│
-│  │   WebUI     │─────▶│  FastAPI    │◀─────│  Celery      ││
-│  │  (Flask)    │      │   (REST)    │      │  Worker      ││
-│  └─────────────┘      └─────────────┘      └──────────────┘│
+│                    Docker (Ghidra API)                      │
+│  ┌─────────────┐      ┌─────────────┐      ┌──────────────┐ │
+│  │   WebUI     │─────▶│  FastAPI    │◀─────│  Celery     │ │
+│  │  (Flask)    │      │   (REST)    │      │  Worker      │ │
+│  └─────────────┘      └─────────────┘      └──────────────┘ │
 │       │                    │                     │          │
 │       │                    │                     ▼          │
 │       │                    │              ┌──────────────┐  │
@@ -59,10 +59,10 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 │       │                    │              │  12.0.4      │  │
 │       │                    │              └──────────────┘  │
 │       ▼                    ▼                     │          │
-│  ┌─────────────┐      ┌─────────────┐             │          │
-│  │   Redis     │      │  Radare2    │             │          │
-│  │  (Broker)   │      │  (CLI)      │             │          │
-│  └─────────────┘      └─────────────┘             │          │
+│  ┌─────────────┐      ┌─────────────┐            │          │
+│  │   Redis     │      │  Radare2    │            │          │
+│  │  (Broker)   │      │  (CLI)      │            │          │
+│  └─────────────┘      └─────────────┘            │          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -87,6 +87,7 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 
 **Installation:**
 ```bash
+pip install -r requirements.txt
 # For GPU support, install PyTorch with CUDA
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
@@ -99,7 +100,7 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 **Ollama Setup (llama3.2:3b):**
 ```bash
 # Install Ollama for Windows
-winget install Ollama.Ollama
+irm https://ollama.com/install.ps1 | iex
 
 # Start Ollama server
 ollama serve
@@ -108,49 +109,16 @@ ollama serve
 ollama pull llama3.2:3b
 
 # Verify
+Invoke-RestMethod -Uri "http://localhost:11434/api/tags"
+# or
 curl http://localhost:11434/api/tags
 ```
-
-**llm4decompile Setup (1.3B-v2):**
-```bash
-# Install PyTorch with CUDA
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-
-# Install transformers
-pip install transformers>=4.30.0
-
-# Model will auto-download on first use
-# Or clone manually:
-git clone https://huggingface.co/LLM4Binary/llm4decompile-1.3b-v2
-```
-
-### Recommended Models for RTX 2060 (6GB VRAM)
-
-**Primary Models:**
-- **Ollama**: llama3.2:3b (2GB) - General AI assistance
-- **llm4decompile**: 1.3B-v2 (4-6GB) - Pseudo-code refinement
-
-### Performance Comparison
-
-| Deployment | Speed | GPU Support | Setup Complexity |
-|------------|-------|-------------|------------------|
-| Ollama Windows Native | Fast | Full | Low |
-| llm4decompile CPU | Slow (~30s/file) | No | Medium |
-| llm4decompile GPU | Fast (~3s/file) | Full | Medium |
-
-### Benefits of Windows Native Deployment
-
-1. **Maximum GPU Performance**: Direct GPU access without Docker overhead
-2. **Faster Inference**: 8-10x speedup for llm4decompile
-3. **Simplified Setup**: No Docker GPU configuration needed
-4. **Flexibility**: Easy to switch between models
-5. **Cost Effective**: No GPU passthrough complexity
 
 ### Quick Start
 
 1. **Clone repository**:
 ```bash
-git clone <repository>
+git clone https://github.com/Themehackers/REAA
 cd REAA
 ```
 
@@ -171,7 +139,8 @@ curl http://localhost:11434/api/tags
 
 4. **Start Docker services**:
 ```bash
-# Terminal 3: Start Ghidra API infrastructure
+# Terminal 3: Start & Build Ghidra API infrastructure
+docker-compose build
 docker-compose up -d
 ```
 
@@ -180,40 +149,31 @@ docker-compose up -d
 http://127.0.0.1:5000
 ```
 
-6. **Verify API**:
-```bash
-curl http://127.0.0.1:8000/health
-```
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
 ```bash
-# Ghidra Configuration
+API_KEY=ollama
+API_BASE=http://localhost:11434/v1
+MODEL_NAME=llama3.2:3b
 GHIDRA_HOME=/opt/ghidra
 GHIDRA_BIN=/opt/ghidra/support/analyzeHeadless
 GHIDRA_SCRIPTS=/app/ghidra_scripts
 GHIDRA_VERSION=12.0.4
-
-# Data Storage
 DATA_DIR=/data/ghidra_projects
-MAX_UPLOAD_SIZE=209715200  # 200MB
-
-# Redis & Celery
+MAX_UPLOAD_SIZE=209715200
+API_TITLE=Ghidra Headless REST API
+API_VERSION=2.0.0
 REDIS_URL=redis://localhost:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
 CELERY_TASK_TIMEOUT=1800
-
-# API Configuration
-API_TITLE=Ghidra Headless REST API
-API_VERSION=2.0.0
-
-# AI Integration
-API_KEY=ollama
-API_BASE=http://localhost:11434/v1
-MODEL_NAME=qwen2.5:3b
+LOG_LEVEL=INFO
+ADMIN_USERNAME='It's up to you'
+ADMIN_EMAIL='It's up to you'
+ADMIN_PASSWORD='It's up to you'
 ```
 
 ## 📊 Analysis Output
@@ -233,16 +193,6 @@ Each analysis generates comprehensive artifacts:
 - **coverage.json**: Analysis coverage metrics
 - **timeline.json**: Analysis progress tracking
 
-### Enhanced Function Metadata
-
-Each function includes:
-- Basic info: name, address, size, return type
-- Parameters: name, type, ordinal
-- Calling convention
-- Body information: start, end, size
-- Call metrics: caller count, called count
-- Decompilation excerpt
-
 ## 🌐 WebUI Features
 
 ### Main Interface
@@ -257,96 +207,93 @@ Each function includes:
 - **Security Analysis**: Vulnerability detection
 - **Code Review**: AI-assisted code review
 
+### Visualization
+- **Timeline View**: Analysis progress timeline
+- **Call Graph**: Interactive function call visualization
+- **Memory Layout**: Memory sections and permissions
+- **Control Flow**: Execution paths and basic blocks
+
+### Collaboration
+- **Remote Collaboration**: Share analysis sessions
+- **Real-time Sync**: Live updates across users
+- **Job Sharing**: Share decompilation results
+
+### Pseudocode Refinement
+- **Refine All**: Batch refine all pseudocode files
+- **Selective Refine**: Choose specific files to refine
+- **LLM Integration**: Uses llm4decompile model
+
+### Export
+- **Export Results**: Download analysis artifacts
+- **Multiple Formats**: JSON, text, and structured exports
+
 ## 🔌 API Endpoints
 
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+- `GET /api/auth/me` - Get current user info
+
 ### Analysis
-- `POST /analyze` - Upload binary for analysis
-- `POST /analyze_b64` - Upload base64-encoded binary
-- `GET /status/{job_id}` - Get job status
+- `POST /upload` - Upload binary for analysis
 - `GET /jobs` - List all jobs
+- `GET /status/{job_id}` - Get job status
+- `GET /api/jobs` - List jobs (API)
+- `GET /api/jobs/{job_id}` - Get job details
+- `DELETE /api/jobs/{job_id}` - Delete job
+- `GET /api/jobs/{job_id}/download` - Download job artifacts
+- `POST /api/jobs/cleanup` - Clean up old jobs
 
-### Results
-- `GET /results/{job_id}/functions` - List functions
-- `GET /results/{job_id}/function/{addr}/decompile` - Get decompiled code
-- `GET /results/{job_id}/xrefs/{addr}` - Get cross-references
-- `GET /results/{job_id}/imports` - List imports
-- `GET /results/{job_id}/strings` - List strings
-- `POST /query` - Natural language search
+### Chat & AI
+- `POST /chat` - Send chat message
+- `GET /chat/history/{job_id}` - Get chat history
+- `DELETE /chat/history/{job_id}` - Clear chat history
 
-### Monitoring
-- `GET /health` - Health check
-- `GET /metrics` - System metrics
+### Security Analysis
+- `POST /security/analyze` - Analyze security vulnerabilities
+- `GET /security/report/{job_id}` - Get security report
+- `DELETE /security/history/{job_id}` - Clear security history
+- `POST /security/scan` - Scan for vulnerabilities
 
-### MCP Integration
-- `GET /mcp/descriptor` - MCP tool descriptor
-- `GET /mcp/tools` - MCP tools definition
-- `POST /tools/*` - MCP tool endpoints
+### Pseudocode Refinement
+- `GET /results/{job_id}/function/{addr}/refine` - Refine single function
+- `POST /api/jobs/{job_id}/refine/batch` - Batch refine all functions
+- `GET /api/jobs/{job_id}/pseudocode/files` - List pseudocode files
+- `POST /api/jobs/{job_id}/refine/selective` - Selective refinement
 
-## 💻 Development
+### Results & Visualization
+- `GET /api/jobs/{job_id}/memory` - Get memory layout
+- `GET /api/jobs/{job_id}/callgraph` - Get call graph
+- `GET /api/jobs/{job_id}/controlflow/{function_address}` - Get control flow
 
-### Local Development
+### Radare2 Integration
+- `GET /api/r2/status` - Radare2 status
+- `POST /api/r2/analyze` - Analyze binary with R2
+- `POST /api/r2/command` - Execute R2 command
+- `POST /api/r2/load` - Load binary in R2
+- `GET /api/r2/functions` - List functions
+- `GET /api/r2/strings` - List strings
+- `GET /api/r2/imports` - List imports
+- `POST /api/r2/autonomous` - Autonomous analysis
+- `GET /api/r2/summary` - Get analysis summary
+- `GET/POST /api/r2/boundaries` - Get/set boundaries
+- `GET/POST /api/r2/asm/config` - Get/set ASM config
+- `POST /api/r2/asm/preset` - Set ASM preset
+- `POST /api/r2/disasm/function` - Disassemble function
+- `POST /api/r2/disasm/range` - Disassemble range
+- `POST /api/r2/disasm/graph` - Get disassembly graph
+- `POST /api/asm/analyze` - Analyze assembly
 
-1. **Install dependencies**:
-```bash
-pip install -r requirements.txt
-```
+### System & Monitoring
+- `GET /api/system/status` - System status
+- `GET /api/docker/status` - Docker status
+- `GET /api/docker/logs/{container_name}` - Docker container logs
+- `GET /gpu/status` - GPU status
+- `GET /gpu/detailed` - Detailed GPU info
+- `GET /api/remote/health` - Remote collaboration health
 
-2. **Install Ghidra 12.0.4** and set `GHIDRA_HOME`
-
-3. **Start Redis**:
-```bash
-redis-server
-```
-
-4. **Start Celery worker**:
-```bash
-celery -A core.celery_app worker --loglevel=info
-```
-
-5. **Start API**:
-```bash
-uvicorn core.app:app --reload --port 8000
-```
-
-6. **Start WebUI**:
-```bash
-python webui/app.py
-```
-
-### Adding Custom Scripts
-
-Add custom Ghidra scripts to `ghidra_scripts/`:
-
-```python
-# Example custom script
-from ghidra.program.model.listing import FunctionIterator
-
-# Your custom analysis logic
-# ...
-```
-
-## 🔍 Usage Examples
-
-### Analyze Binary via API
-```bash
-curl -X POST http://localhost:8000/analyze \
-  -F "file=@malware.exe" \
-  -F "persist=false"
-```
-
-### Natural Language Query
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Find functions that call malloc"}'
-```
-
-### Get Function Graph
-```bash
-curl http://localhost:8000/results/{job_id}/function_graph
-```
-
-## 🛠️ Troubleshooting
+## ️ Troubleshooting
 
 ### AI Model Issues
 
@@ -385,11 +332,6 @@ ollama pull llama3.2:3b --verbose
 # 3. Disk space (model is ~5GB)
 ```
 
-### Decompiler Not Working
-- Ensure Ghidra 12.0.4 is properly installed
-- Check PyGhidra installation: `pip install pyghidra`
-- Verify script path in `GHIDRA_SCRIPTS`
-- Check worker logs for detailed errors
 
 ### Celery Worker Issues
 ```bash
@@ -400,56 +342,9 @@ docker-compose logs celery-worker
 docker-compose restart celery-worker
 ```
 
-### Memory Issues
-- Increase Docker memory limit
-- Reduce `MAX_UPLOAD_SIZE`
-- Increase system RAM
-
-## 📈 Performance Optimization
-
-### Scaling
-- Increase Celery worker count in `docker-compose.yml`
-- Use Redis Cluster for high availability
-- Implement job queuing strategies
-
-### Caching
-- Enable result caching for repeated analyses
-- Use CDN for static assets
-- Implement database query optimization
-
-## 🔒 Security Considerations
-
-1. **Authentication**: Add API authentication middleware
-2. **Rate Limiting**: Implement request rate limiting
-3. **File Validation**: Validate uploaded files
-4. **Sandboxing**: Isolate analysis environment
-5. **TLS**: Enable HTTPS for production
-6. **Input Sanitization**: Sanitize all user inputs
-
-## 📝 License
-
-This project is based on the biniamfd/ghidra-headless-rest reference implementation with significant enhancements.
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
 ## 📚 Additional Resources
 
 - [Ghidra Documentation](https://ghidra-sre.org/)
 - [PyGhidra Documentation](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)
 - [Radare2 Documentation](https://radare.org/)
 - [Celery Documentation](https://docs.celeryproject.org/)
-
-## 🎯 Roadmap
-
-- [ ] Enhanced decompiler integration
-- [ ] Binary diffing capabilities
-- [ ] Machine learning-based classification
-- [ ] Collaborative analysis features
-- [ ] Plugin system for custom analyzers
