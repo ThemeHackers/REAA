@@ -1934,11 +1934,10 @@ def save_settings():
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
-    """Get available models and current model"""
+    """Get current model and system status"""
     try:
         return jsonify({
             "current_model": model_manager.get_current_model(),
-            "available_models": model_manager.get_available_models(),
             "system_status": model_manager.get_system_status()
         })
     except Exception as e:

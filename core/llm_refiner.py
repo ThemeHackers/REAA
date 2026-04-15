@@ -1,6 +1,6 @@
 """
 LLM Refiner Module for REAA
-Uses llm4decompile-1.3B-v2 model to refine Ghidra pseudo-code
+Uses llm4decompile model to refine Ghidra pseudo-code
 """
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -8,62 +8,93 @@ from pathlib import Path
 import logging
 import structlog
 from typing import Optional, Dict, Any
+from .config import settings
 
 log = structlog.get_logger()
 
 
 class LLMRefiner:
     """Service for refining decompiled code using LLM4Decompile"""
-    
+
     def __init__(self, model_path: Optional[str] = None):
         """
         Initialize the LLM refiner
-        
+
         Args:
-            model_path: Path to the llm4decompile model. If None, uses default path
+            model_path: Path to the llm4decompile model. If None, uses env var or default
         """
-        self.model_path = model_path or self._get_default_model_path()
+        self.model_path = model_path or settings.LLM4DECOMPILE_MODEL_PATH
         self.tokenizer = None
         self.model = None
         self.device = None
         self._initialized = False
-        
-    def _get_default_model_path(self) -> str:
-        """Get default model path from RD folder"""
-        
-        rd_folder = Path(__file__).parent.parent / "RD" / "llm4decompile-1.3b-v2"
-        if rd_folder.exists():
-            return str(rd_folder)
-      
-        return "LLM4Binary/llm4decompile-1.3b-v2"
     
     def load_model(self) -> bool:
         """
         Load the LLM model and tokenizer
-        
+
         Returns:
             bool: True if successful, False otherwise
         """
+        if not self.model_path:
+            log.warning("LLM4DECOMPILE_MODEL_PATH not set, skipping model load")
+            return False
+
         try:
-            log.info(f"Loading LLM refiner model from {self.model_path}")
+            # Check if it's a local path or HuggingFace model name
+            is_local = Path(self.model_path).exists()
+
+            if is_local:
+                log.info(f"Loading LLM refiner model from local path: {self.model_path}")
+            else:
+                log.info(f"Loading LLM refiner model from HuggingFace: {self.model_path}")
+
             
-        
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            device_setting = settings.LLM4DECOMPILE_DEVICE.lower()
+            if device_setting == "auto":
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            else:
+                self.device = device_setting
             log.info(f"Using device: {self.device}")
-            
+
+
+            dtype_str = settings.LLM4DECOMPILE_DTYPE.lower()
+            dtype_map = {
+                "float16": torch.float16,
+                "float32": torch.float32,
+                "bfloat16": torch.bfloat16,
+                "float8": torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.float16,
+            }
+            dtype = dtype_map.get(dtype_str, torch.float16)
+
+         
+            model_kwargs = {
+                "trust_remote_code": True,
+                "dtype": dtype,
+            }
+
           
+            if self.device == "cuda":
+                model_kwargs["device_map"] = "auto"
+
+       
+            if settings.LLM4DECOMPILE_MAX_MEMORY:
+                model_kwargs["max_memory"] = eval(settings.LLM4DECOMPILE_MAX_MEMORY)
+
+           
+            if settings.LLM4DECOMPILE_QUANTIZATION:
+                model_kwargs["quantization_config"] = eval(settings.LLM4DECOMPILE_QUANTIZATION)
+
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
-                dtype=torch.float16,
-                device_map="auto",
-                trust_remote_code=True
+                **model_kwargs
             )
-            
+
             self._initialized = True
             log.info(f"LLM refiner loaded successfully on {self.device}")
             return True
-            
+
         except Exception as e:
             log.error(f"Failed to load LLM refiner: {e}")
             self._initialized = False
@@ -78,48 +109,47 @@ class LLMRefiner:
         return text
     
     def refine_pseudo_code(
-        self, 
-        pseudo_code: str, 
-        max_new_tokens: int = 2048
+        self,
+        pseudo_code: str,
+        max_new_tokens: Optional[int] = None
     ) -> Optional[str]:
         """
         Refine Ghidra pseudo-code to readable C code
-        
+
         Args:
             pseudo_code: The pseudo-code to refine
-            max_new_tokens: Maximum number of tokens to generate
-            
+            max_new_tokens: Maximum number of tokens to generate (uses settings if None)
+
         Returns:
             str: Refined code, or None if refinement failed
         """
         if not self._initialized:
             log.error("LLM refiner not initialized")
             return None
-        
+
         try:
-         
             prompt = f"# This is the pseudo-code:\n{pseudo_code}\n# What is the source code?\n"
-            
-           
+
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-            
+
           
+            tokens_limit = max_new_tokens or settings.LLM4DECOMPILE_MAX_NEW_TOKENS
+
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
-                    max_new_tokens=max_new_tokens,
+                    max_new_tokens=tokens_limit,
                     temperature=0.7,
                     do_sample=True,
                     pad_token_id=self.tokenizer.eos_token_id
                 )
-            
-             
+
             refined_code = self.tokenizer.decode(outputs[0][len(inputs[0]):-1])
             refined_code = self.clean_tokens(refined_code)
-            
+
             log.info(f"Refinement successful, output length: {len(refined_code)}")
             return refined_code
-            
+
         except Exception as e:
             log.error(f"Error during refinement: {e}")
             return None

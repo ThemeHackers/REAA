@@ -32,6 +32,18 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
     
+ 
+    OLLAMA_MAX_TOKENS: int = 4096
+    OLLAMA_TEMPERATURE: float = 0.7
+    
+
+    LLM4DECOMPILE_MODEL_PATH: Optional[str] = None
+    LLM4DECOMPILE_DEVICE: str = "auto"
+    LLM4DECOMPILE_DTYPE: str = "float16"
+    LLM4DECOMPILE_MAX_MEMORY: Optional[str] = None
+    LLM4DECOMPILE_QUANTIZATION: Optional[str] = None
+    LLM4DECOMPILE_MAX_NEW_TOKENS: int = 2048
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
