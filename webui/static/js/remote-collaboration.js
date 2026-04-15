@@ -269,7 +269,7 @@ class RemoteCollaborationManager {
     }
     
     async connectAsClient(serverUrl, username, apiKey) {
-        console.log('[Remote] Connecting as client to:', serverUrl, 'username:', username);
+        // console.log('[Remote] Connecting as client to:', serverUrl, 'username:', username);
 
         this.authErrorOccurred = false;
         try {
@@ -289,7 +289,7 @@ class RemoteCollaborationManager {
             });
             
             this.remoteSocket.on('connect', () => {
-                console.log('[Remote] Socket connected');
+                // console.log('[Remote] Socket connected');
                 this.isConnected = true;
                 this.serverConnectedClients = 0;
         
@@ -319,7 +319,7 @@ class RemoteCollaborationManager {
             });
             
             this.remoteSocket.on('disconnect', () => {
-                console.log('[Remote] Socket disconnected');
+                // console.log('[Remote] Socket disconnected');
                 this.isConnected = false;
                 this.updateConnectionStatus(false);
                 this.saveConnectionStatus('disconnected');
@@ -332,7 +332,7 @@ class RemoteCollaborationManager {
             });
             
             this.remoteSocket.on('auth_success', (data) => {
-                console.log('[Remote] Auth success, user_id:', data.user_id);
+                // console.log('[Remote] Auth success, user_id:', data.user_id);
                 this.currentUser = data.user_id;
                 this.saveConnectionStatus('connected');
             });
@@ -359,12 +359,12 @@ class RemoteCollaborationManager {
             });
             
             this.remoteSocket.on('job_list', (data) => {
-                console.log('[Remote] Job list received:', data.jobs?.length, 'jobs');
+                // console.log('[Remote] Job list received:', data.jobs?.length, 'jobs');
                 this.updateRemoteJobsList(data.jobs);
             });
             
             this.remoteSocket.on('room_users', (data) => {
-                console.log('[Remote] Received room_users event:', data);
+                // console.log('[Remote] Received room_users event:', data);
                 this.handleRoomUsers(data);
             });
             
@@ -395,7 +395,7 @@ class RemoteCollaborationManager {
                     if (this.latencyHistory.length > 10) {
                         this.latencyHistory.shift();
                     }
-                    console.log('[Remote] Latency:', this.latency, 'ms');
+                    // console.log('[Remote] Latency:', this.latency, 'ms');
                     this.updateConnectionQuality();
                     this.pingStartTime = null;
                 }
@@ -409,7 +409,7 @@ class RemoteCollaborationManager {
     }
     
     async startAsServer() {
-        console.log('[Remote] Starting server mode');
+        // console.log('[Remote] Starting server mode');
         this.connectionMode = 'server';
         this.isConnected = true;
         this.updateConnectionStatus(true);
@@ -579,7 +579,7 @@ class RemoteCollaborationManager {
     }
     
     startLatencyCheck() {
-        console.log('[Remote] Starting latency check');
+        // console.log('[Remote] Starting latency check');
         if (this.latencyCheckInterval) {
             clearInterval(this.latencyCheckInterval);
         }
@@ -593,7 +593,7 @@ class RemoteCollaborationManager {
     }
     
     stopLatencyCheck() {
-        console.log('[Remote] Stopping latency check');
+        // console.log('[Remote] Stopping latency check');
         if (this.latencyCheckInterval) {
             clearInterval(this.latencyCheckInterval);
             this.latencyCheckInterval = null;
@@ -640,7 +640,7 @@ class RemoteCollaborationManager {
     }
     
     updateConnectedUsersList(users) {
-        console.log('[Remote] Updating connected users list:', users?.length, 'users');
+        // console.log('[Remote] Updating connected users list:', users?.length, 'users');
         const container = $('#connected-users-list');
         container.empty();
         
@@ -704,7 +704,7 @@ class RemoteCollaborationManager {
     }
     
     handleRoomUsers(data) {
-        console.log('handleRoomUsers received:', data);
+        // console.log('handleRoomUsers received:', data);
         const { job_id, users } = data;
         this.connectedUsers.set(job_id, new Set(users.map(u => u.user_id)));
         this.updateRemoteJobsList(this.remoteJobs.get('all') || []);
@@ -717,9 +717,9 @@ class RemoteCollaborationManager {
         }
         
         this.updateRemoteJobsListDebounce = setTimeout(() => {
-            console.log('[Remote] updateRemoteJobsList called with:', jobs?.length, 'jobs', 'full jobs:', jobs);
+            // console.log('[Remote] updateRemoteJobsList called with:', jobs?.length, 'jobs', 'full jobs:', jobs);
             const container = $('#remote-jobs-list');
-            console.log('[Remote] Container found:', container.length);
+            // console.log('[Remote] Container found:', container.length);
             container.empty();
         
 
@@ -734,9 +734,9 @@ class RemoteCollaborationManager {
                 return;
             }
             
-            console.log('[Remote] Starting to render jobs, count:', jobs.length);
+            // console.log('[Remote] Starting to render jobs, count:', jobs.length);
             jobs.forEach(job => {
-                console.log('[Remote] Rendering job:', job.filename);
+                // console.log('[Remote] Rendering job:', job.filename);
                 const usersCount = job.connected_users || this.connectedUsers.get(job.job_id)?.size || 0;
                 const modeLabel = this.connectionMode === 'server' ? 'LOCAL' : 'REMOTE';
                 const modeColor = this.connectionMode === 'server' ? 'bg-green-600' : 'bg-blue-600';
@@ -761,7 +761,7 @@ class RemoteCollaborationManager {
                     </div>
                 `;
                 container.append(jobHtml);
-                console.log('[Remote] Appended job HTML for:', job.filename);
+                // console.log('[Remote] Appended job HTML for:', job.filename);
             });
             
             if (this.connectionMode === 'client') {
@@ -776,7 +776,7 @@ class RemoteCollaborationManager {
     }
     
     joinRemoteJob(jobId) {
-        console.log('[Remote] Joining remote job:', jobId, 'mode:', this.connectionMode, 'isConnected:', this.isConnected, 'remoteSocket:', !!this.remoteSocket);
+        // console.log('[Remote] Joining remote job:', jobId, 'mode:', this.connectionMode, 'isConnected:', this.isConnected, 'remoteSocket:', !!this.remoteSocket);
         if (this.connectionMode === 'server') {
             this.loadJobInUI(jobId);
             this.showToast('Loaded local job', 'success');
@@ -791,7 +791,7 @@ class RemoteCollaborationManager {
         
         this.currentRoom = jobId;
         
-        console.log('[Remote] Emitting join_room with:', { job_id: jobId, user_id: this.currentUser });
+        // console.log('[Remote] Emitting join_room with:', { job_id: jobId, user_id: this.currentUser });
         this.remoteSocket.emit('join_room', {
             job_id: jobId,
             user_id: this.currentUser,
@@ -824,7 +824,7 @@ class RemoteCollaborationManager {
     }
     
     handleUserJoined(message) {
-        console.log('[Remote] User joined:', message.username, 'job:', message.job_id);
+        // console.log('[Remote] User joined:', message.username, 'job:', message.job_id);
         if (!this.connectedUsers.has(message.job_id)) {
             this.connectedUsers.set(message.job_id, new Set());
         }
@@ -839,7 +839,7 @@ class RemoteCollaborationManager {
     }
     
     handleUserLeft(message) {
-        console.log('[Remote] User left:', message.username, 'job:', message.job_id);
+        // console.log('[Remote] User left:', message.username, 'job:', message.job_id);
         if (this.connectedUsers.has(message.job_id)) {
             this.connectedUsers.get(message.job_id).delete(message.user_id);
         }
@@ -890,7 +890,7 @@ class RemoteCollaborationManager {
     }
     
     updateConnectionStatus(connected) {
-        console.log('[Remote] updateConnectionStatus called with:', connected, 'mode:', this.connectionMode);
+        // console.log('[Remote] updateConnectionStatus called with:', connected, 'mode:', this.connectionMode);
         const disconnectBtn = $('#disconnect-remote');
         const connectionIndicator = $('#connection-indicator');
         const connectionIndicatorModal = $('#connection-indicator-modal');
