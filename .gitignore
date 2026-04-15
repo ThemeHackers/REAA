@@ -52,13 +52,15 @@ build/
 radare2-*/
 
 r2dec-js/
+LLM4Decompile/
+llm4decompile-6.7b-v2/
 
 
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
-
+core/__pycache__
 
 *.db
 *.sqlite
