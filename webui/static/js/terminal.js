@@ -26,7 +26,11 @@ function initTerminal(currentJobId) {
         $('#terminal-toggle').remove();
         $('#r2-terminal-toggle').remove();
 
-        const headerContainer = $('.bg-gray-800.border-b.border-gray-700 .flex.items-center.gap-3');
+        let headerContainer = $('.bg-gray-800.border-b.border-gray-700 .flex.items-center.justify-between .flex.items-center.gap-3');
+        
+        if (headerContainer.length === 0) {
+            headerContainer = $('.bg-gray-800.border-b.border-gray-700 .flex.items-center.gap-3');
+        }
         
         if (headerContainer.length === 0) {
             const settingsBtn = $('#settings-btn');

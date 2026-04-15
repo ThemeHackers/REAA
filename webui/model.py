@@ -12,7 +12,7 @@ class ModelManager:
             base_url=os.getenv("API_BASE", "http://localhost:11434/v1"),
             api_key=os.getenv("API_KEY", "ollama")
         )
-        self.model = os.getenv("MODEL_NAME", "qwen2.5:3b")
+        self.model = os.getenv("MODEL_NAME", "llama3.2:3b")
         self.models_dir = os.path.join(os.path.dirname(__file__), "models")
         
         if not os.path.exists(self.models_dir):

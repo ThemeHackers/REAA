@@ -26,7 +26,7 @@ __pycache__/
 .windsurf/
 
 
-data/
+
 *.log
 logs/
 temp/
@@ -35,6 +35,8 @@ tmp/
 webui/chat/
 webui/chats/
 
+data/
+instance/
 
 dist/
 build/
@@ -43,18 +45,13 @@ build/
 
 
 .dockerignore
-
+RD/
 
 *.gpr
 *.gzf
 *.proj
 
 radare2-*/
-
-r2dec-js/
-LLM4Decompile/
-llm4decompile-6.7b-v2/
-
 
 .pytest_cache/
 .coverage

@@ -32,22 +32,38 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 ## 🏗️ Architecture
 
 ```
-┌─────────────┐      ┌─────────────┐      ┌──────────────┐
-│   WebUI     │─────▶│  FastAPI    │◀─────│  Celery      │
-│  (Flask)    │      │   (REST)    │      │  Worker      │
-└─────────────┘      └─────────────┘      └──────────────┘
-       │                    │                     │
-       │                    │                     ▼
-       │                    │              ┌──────────────┐
-       │                    │              │   Ghidra     │
-       │                    │              │  12.0.4      │
-       │                    │              └──────────────┘
-       │                    │                     │
-       ▼                    ▼                     ▼
-┌─────────────┐      ┌─────────────┐      ┌──────────────┐
-│   Redis     │      │  Radare2    │      │   AI Models  │
-│  (Broker)   │      │  (CLI)      │      │  (Ollama)    │
-└─────────────┘      └─────────────┘      └──────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                   Windows Native (GPU)                      │
+│  ┌─────────────┐      ┌──────────────────┐                 │
+│  │   Ollama    │      │ llm4decompile    │                 │
+│  │ (llama3.2)  │      │    (1.3B-v2)     │                 │
+│  │  RTX 2060   │      │    RTX 2060      │                 │
+│  └─────────────┘      └──────────────────┘                 │
+└─────────────────────────────────────────────────────────────┘
+        │                         │
+        │ http://localhost:11434   │ Direct PyTorch
+        │                         │
+        └──────────┬──────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Docker (Ghidra API)                       │
+│  ┌─────────────┐      ┌─────────────┐      ┌──────────────┐│
+│  │   WebUI     │─────▶│  FastAPI    │◀─────│  Celery      ││
+│  │  (Flask)    │      │   (REST)    │      │  Worker      ││
+│  └─────────────┘      └─────────────┘      └──────────────┘│
+│       │                    │                     │          │
+│       │                    │                     ▼          │
+│       │                    │              ┌──────────────┐  │
+│       │                    │              │   Ghidra     │  │
+│       │                    │              │  12.0.4      │  │
+│       │                    │              └──────────────┘  │
+│       ▼                    ▼                     │          │
+│  ┌─────────────┐      ┌─────────────┐             │          │
+│  │   Redis     │      │  Radare2    │             │          │
+│  │  (Broker)   │      │  (CLI)      │             │          │
+│  └─────────────┘      └─────────────┘             │          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## 📦 Installation
@@ -56,6 +72,79 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 - Docker and Docker Compose
 - At least 4GB RAM (8GB recommended for large binaries)
 - Python 3.10+ (for local development)
+
+### GPU Requirements (for LLM-based decompilation)
+
+**For llm4decompile integration:**
+- **VRAM**: Minimum 4GB (6GB+ recommended)
+- **GPU**: NVIDIA GPU with CUDA support (CUDA 11.8+ or 12.x)
+- **Compatible GPUs**: RTX series (2060+, 3060+, 4060+), GTX series (1660+, 1060+), Tesla series
+- **AMD GPUs**: Not officially supported (ROCm may work but not recommended)
+
+**Performance:**
+- **CPU**: ~30 seconds per file (not recommended for production)
+- **GPU**: ~3-5 seconds per file (8-10x faster)
+
+**Installation:**
+```bash
+# For GPU support, install PyTorch with CUDA
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# Verify GPU availability
+python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+```
+
+### Windows Native AI Models Setup
+
+**Ollama Setup (llama3.2:3b):**
+```bash
+# Install Ollama for Windows
+winget install Ollama.Ollama
+
+# Start Ollama server
+ollama serve
+
+# Download llama3.2:3b model
+ollama pull llama3.2:3b
+
+# Verify
+curl http://localhost:11434/api/tags
+```
+
+**llm4decompile Setup (1.3B-v2):**
+```bash
+# Install PyTorch with CUDA
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# Install transformers
+pip install transformers>=4.30.0
+
+# Model will auto-download on first use
+# Or clone manually:
+git clone https://huggingface.co/LLM4Binary/llm4decompile-1.3b-v2
+```
+
+### Recommended Models for RTX 2060 (6GB VRAM)
+
+**Primary Models:**
+- **Ollama**: llama3.2:3b (2GB) - General AI assistance
+- **llm4decompile**: 1.3B-v2 (4-6GB) - Pseudo-code refinement
+
+### Performance Comparison
+
+| Deployment | Speed | GPU Support | Setup Complexity |
+|------------|-------|-------------|------------------|
+| Ollama Windows Native | Fast | Full | Low |
+| llm4decompile CPU | Slow (~30s/file) | No | Medium |
+| llm4decompile GPU | Fast (~3s/file) | Full | Medium |
+
+### Benefits of Windows Native Deployment
+
+1. **Maximum GPU Performance**: Direct GPU access without Docker overhead
+2. **Faster Inference**: 8-10x speedup for llm4decompile
+3. **Simplified Setup**: No Docker GPU configuration needed
+4. **Flexibility**: Easy to switch between models
+5. **Cost Effective**: No GPU passthrough complexity
 
 ### Quick Start
 
@@ -71,17 +160,27 @@ cp .env.example .env
 # Edit .env with your settings
 ```
 
-3. **Start services**:
+3. **Start AI models (Windows Native)**:
 ```bash
+# Terminal 1: Start Ollama
+ollama serve
+
+# Terminal 2: (Optional) Verify Ollama
+curl http://localhost:11434/api/tags
+```
+
+4. **Start Docker services**:
+```bash
+# Terminal 3: Start Ghidra API infrastructure
 docker-compose up -d
 ```
 
-4. **Access WebUI**:
+5. **Access WebUI**:
 ```
 http://127.0.0.1:5000
 ```
 
-5. **Verify API**:
+6. **Verify API**:
 ```bash
 curl http://127.0.0.1:8000/health
 ```
@@ -248,6 +347,43 @@ curl http://localhost:8000/results/{job_id}/function_graph
 ```
 
 ## 🛠️ Troubleshooting
+
+### AI Model Issues
+
+**Ollama GPU Issues:**
+```bash
+# Check if GPU is detected
+curl http://localhost:11434/api/tags
+
+# If GPU not detected, ensure:
+# 1. NVIDIA drivers are installed
+# 2. CUDA is properly configured
+# 3. Ollama is running with GPU support
+```
+
+**PyTorch GPU Issues:**
+```bash
+# Check CUDA availability
+python -c "import torch; print(torch.cuda.is_available())"
+
+# Check GPU name
+python -c "import torch; print(torch.cuda.get_device_name(0))"
+
+# Reinstall PyTorch if needed
+pip uninstall torch torchvision torchaudio
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+```
+
+**Model Download Issues:**
+```bash
+# For Ollama, try:
+ollama pull llama3.2:3b --verbose
+
+# For llm4decompile, check:
+# 1. Internet connection
+# 2. Hugging Face access
+# 3. Disk space (model is ~5GB)
+```
 
 ### Decompiler Not Working
 - Ensure Ghidra 12.0.4 is properly installed

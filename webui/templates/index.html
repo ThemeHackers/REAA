@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>REAA</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
@@ -55,61 +56,76 @@
             color: #9ca3af;
         }
 
-        .markdown-content table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 1em 0;
-            font-size: 0.9em;
-        }
-
-        .markdown-content th,
-        .markdown-content td {
-            border: 1px solid #4b5563;
-            padding: 0.5em;
-            text-align: left;
-        }
-
-        .markdown-content th {
-            background-color: #374151;
-            font-weight: 600;
-        }
-
-        .markdown-content tr:nth-child(even) {
-            background-color: rgba(255, 255, 255, 0.02);
-        }
-
-        .markdown-content pre {
-            background-color: #161b22;
-            padding: 1em;
-            border-radius: 0.5rem;
+        .markdown-content {
             overflow-x: auto;
-            margin: 1em 0;
-            border: 1px solid #30363d;
-        }
+            max-width: 100%;
+            word-wrap: break-word;
 
-        .markdown-content code {
-            font-family: 'ui-monospace', 'SFMono-Regular', 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
-            background-color: rgba(110, 118, 129, 0.4);
-            padding: 0.2em 0.4em;
-            border-radius: 0.25rem;
-            font-size: 0.9em;
-        }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                margin: 1em 0;
+                font-size: 0.9em;
+                overflow-x: auto;
+                display: block;
+            }
 
-        .markdown-content pre code {
-            background-color: transparent;
-            padding: 0;
-            border-radius: 0;
-            color: inherit;
-        }
+            th,
+            td {
+                border: 1px solid #4b5563;
+                padding: 0.5em;
+                text-align: left;
+                min-width: fit-content;
+            }
 
-        .markdown-content blockquote {
-            border-left: 4px solid #6366f1;
-            padding-left: 1em;
-            color: #9ca3af;
-            margin: 1em 0;
-            background-color: rgba(99, 102, 241, 0.1);
-            padding: 0.5em 1em;
-            border-radius: 0 0.25rem 0.25rem 0;
+            th {
+                background-color: #374151;
+                font-weight: 600;
+            }
+
+            tr:nth-child(even) {
+                background-color: rgba(255, 255, 255, 0.02);
+            }
+
+            pre {
+                background-color: #161b22;
+                padding: 1em;
+                border-radius: 0.5rem;
+                overflow-x: auto;
+                margin: 1em 0;
+                border: 1px solid #30363d;
+                max-width: 100%;
+                word-wrap: break-word;
+                white-space: pre-wrap;
+            }
+
+            code {
+                font-family: 'ui-monospace', 'SFMono-Regular', 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+                background-color: rgba(110, 118, 129, 0.4);
+                padding: 0.2em 0.4em;
+                border-radius: 0.25rem;
+                font-size: 0.9em;
+                word-wrap: break-word;
+            }
+
+            pre code {
+                background-color: transparent;
+                padding: 0;
+                border-radius: 0;
+                color: inherit;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+
+            blockquote {
+                border-left: 4px solid #6366f1;
+                padding-left: 1em;
+                color: #9ca3af;
+                margin: 1em 0;
+                background-color: rgba(99, 102, 241, 0.1);
+                padding: 0.5em 1em;
+                border-radius: 0 0.25rem 0.25rem 0;
+            }
         }
 
         .markdown-content ul {
@@ -270,6 +286,14 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
+                        <button id="refine-btn" class="hidden text-sm p-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center gap-2" title="Refine all pseudocode files with LLM">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z">
+                                </path>
+                            </svg>
+                            Refine All
+                        </button>
                         <button id="settings-btn"
                             class="text-sm p-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -658,6 +682,20 @@
             </div>
 
 
+            <div class="p-6 border-b border-gray-800">
+                <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z">
+                        </path>
+                    </svg>
+                    GPU Monitor
+                </h2>
+                <div id="gpu-monitor-content" class="space-y-3">
+                </div>
+            </div>
+
+
             <div class="p-6">
                 <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -666,7 +704,7 @@
                     </svg>
                     Recent Activity
                 </h2>
-                <div class="space-y-2 text-sm">
+                <div id="recent-activity-list" class="space-y-2 text-sm">
                     <div class="text-gray-500 text-center py-8">
                         No recent activity
                     </div>
@@ -1294,6 +1332,78 @@
         </div>
     </div>
 
+    <div id="refine-select-modal"
+        class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-4xl max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z">
+                            </path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-white">Select Files to Refine</h2>
+                        <p class="text-xs text-gray-400">Choose pseudocode files from artifacts for LLM refinement</p>
+                    </div>
+                </div>
+                <button id="close-refine-select" class="text-gray-400 hover:text-white transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="flex-1 overflow-hidden flex flex-col">
+                <div class="px-6 py-4 border-b border-gray-700 bg-gray-900">
+                    <div class="flex items-center gap-4">
+                        <div class="flex-1">
+                            <input type="text" id="refine-search" placeholder="Search files..."
+                                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-purple-500">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button id="refine-select-all" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg text-sm transition">
+                                Select All
+                            </button>
+                            <button id="refine-deselect-all" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg text-sm transition">
+                                Deselect All
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 mt-3 text-sm text-gray-400">
+                        <span id="refine-total-files">Total: 0 files</span>
+                        <span id="refine-selected-count">Selected: 0 files</span>
+                        <span id="refine-refined-count" class="text-green-400">Already refined: 0 files</span>
+                    </div>
+                </div>
+                
+                <div id="refine-files-list" class="flex-1 overflow-y-auto px-6 py-4">
+                    <div class="text-center py-8 text-gray-500">
+                        Loading pseudocode files...
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-700 bg-gray-900 flex justify-between items-center">
+                <div id="refine-selection-summary" class="text-sm text-gray-400">
+                    No files selected
+                </div>
+                <div class="flex gap-3">
+                    <button id="refine-cancel" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg text-sm transition">
+                        Cancel
+                    </button>
+                    <button id="refine-confirm" disabled
+                        class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm transition disabled:opacity-50 disabled:cursor-not-allowed">
+                        Refine Selected (0)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
 
         function toggleSidebar(modalId, sidebarId) {
@@ -1368,14 +1478,46 @@
                 const jobs = data.jobs || [];
                 if (jobs.length === 0) {
                     $('#jobs-list').html('<div class="text-center text-gray-500 py-8 text-sm">No analysis jobs yet. Upload a file to get started.</div>');
+                    $('#recent-activity-list').html('<div class="text-gray-500 text-center py-8">No recent activity</div>');
                 } else {
                     jobs.forEach(job => {
                         renderJobItem(job);
+                    });
+                   
+                    const recentJobs = jobs.filter(job => job.status === 'completed' || job.status === 'done').slice(0, 5);
+                    $('#recent-activity-list').empty();
+                    if (recentJobs.length === 0) {
+                        $('#recent-activity-list').html('<div class="text-gray-500 text-center py-8">No completed jobs yet</div>');
+                    }
+                    recentJobs.forEach(job => {
+                        const statusConfig = {
+                            'completed': { color: 'text-green-400', bg: 'bg-green-900/20', icon: '✓' },
+                            'done': { color: 'text-green-400', bg: 'bg-green-900/20', icon: '✓' },
+                            'failed': { color: 'text-red-400', bg: 'bg-red-900/20', icon: '✗' },
+                            'running': { color: 'text-blue-400', bg: 'bg-blue-900/20', icon: '⟳', animate: 'animate-spin' },
+                            'queued': { color: 'text-yellow-400', bg: 'bg-yellow-900/20', icon: '⏱' }
+                        };
+                        const config = statusConfig[job.status] || { color: 'text-gray-400', bg: 'bg-gray-900/20', icon: '○' };
+                        const name = job.filename || job.file_name || "Unknown Binary";
+                        const timeAgo = job.created_at ? new Date(job.created_at).toLocaleString() : 'Unknown';
+                        const activityHtml = `
+                            <div class="flex items-center gap-3 p-2 bg-gray-800 rounded-lg hover:bg-gray-750 transition cursor-pointer" data-job-id="${job.id}">
+                                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full ${config.bg} ${config.color} ${config.animate || ''}">
+                                    <span class="text-xs font-bold">${config.icon}</span>
+                                </span>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-xs text-gray-200 truncate">${name}</div>
+                                    <div class="text-xs text-gray-500">${timeAgo}</div>
+                                </div>
+                            </div>
+                        `;
+                        $('#recent-activity-list').append(activityHtml);
                     });
                 }
             }).fail(function (xhr) {
                 console.error('Failed to load jobs:', xhr);
                 $('#jobs-list').html('<div class="text-center text-red-400 py-8 text-sm">Failed to load jobs. Please refresh the page.</div>');
+                $('#recent-activity-list').html('<div class="text-gray-500 text-center py-8">Failed to load activity</div>');
             });
         }
 
@@ -1625,6 +1767,7 @@
         ${jobName}
     `);
                 $('#job-status-indicator').removeClass('hidden');
+                $('#refine-btn').removeClass('hidden');
 
                 $('.job-item').removeClass('bg-gray-750 border-indigo-500').addClass('border-gray-700');
                 const jobItem = $(`#job-${jobId}`);
@@ -1637,6 +1780,10 @@
                 $('#chat-input').focus();
 
                 updateStatistics(jobId);
+
+                $.get(`/api/jobs/${jobId}`, function (jobData) {
+                    renderMessage('assistant', `🧠 **LLM Refinement Enabled**\n\nThis job has LLM-based pseudo-code refinement enabled. Refined code will be available after analysis completes.`);
+                });
 
                 $.get(`/chat/history/${jobId}`, function (history) {
                     if (Array.isArray(history) && history.length > 0) {
@@ -1661,9 +1808,11 @@
 
                 checkSystemStatus();
                 checkDockerStatus();
+                checkGPUStatus();
 
                 setInterval(checkSystemStatus, 5000);
                 setInterval(checkDockerStatus, 10000);
+                setInterval(checkGPUStatus, 3000);
 
                 $('#refresh-jobs').on('click', function () {
                     $(this).addClass('animate-spin');
@@ -1672,6 +1821,224 @@
                         $(this).removeClass('animate-spin');
                     }, 1000);
                 });
+
+                $('#refine-btn').on('click', function () {
+                    if (!currentJobId) {
+                        showToast('No job selected', 'error');
+                        return;
+                    }
+                    
+                    const $btn = $(this);
+                    $btn.prop('disabled', true).html('<svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Refining...');
+                    
+                    renderMessage('assistant', `🔄 **Starting Batch Refinement**\n\nInitializing LLM refinement for job \`${currentJobId.substring(0, 8)}...\`...\n\nScanning for pseudocode files to refine...`);
+                    
+                    $.ajax({
+                        url: `/api/jobs/${currentJobId}/refine/batch`,
+                        method: 'POST',
+                        success: function (data) {
+                            $btn.prop('disabled', false).html('<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg> Refine All');
+                            
+                            if (data.total_files === 0) {
+                                renderMessage('assistant', `✅ **Refinement Complete**\n\nAll pseudocode files already have refined versions. No files needed processing.`);
+                                showToast('All files already refined', 'info');
+                            } else {
+                                let resultSummary = `🔄 **Batch Refinement Complete**\n\n**Total files processed:** ${data.total_files}\n**Successfully refined:** ${data.success}\n**Errors:** ${data.errors}\n\n`;
+                                
+                                if (data.results && data.results.length > 0) {
+                                    resultSummary += `**Processing details:**\n\n`;
+                                    data.results.forEach((result, index) => {
+                                        const statusIcon = result.status === 'success' ? '✅' : '❌';
+                                        const statusText = result.status === 'success' ? 'Success' : `Error: ${result.error || 'Unknown'}`;
+                                        resultSummary += `${index + 1}. ${statusIcon} \`${result.addr}\` - ${statusText}\n`;
+                                    });
+                                }
+                                
+                                renderMessage('assistant', resultSummary);
+                                showToast(`Refined ${data.success}/${data.total_files} files successfully`, data.success === data.total_files ? 'success' : 'warning');
+                            }
+                            
+                            if (data.errors > 0) {
+                                console.error('Refinement errors:', data.results.filter(r => r.status === 'error'));
+                            }
+                        },
+                        error: function (xhr) {
+                            $btn.prop('disabled', false).html('<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg> Refine All');
+                            renderMessage('assistant', `❌ **Refinement Failed**\n\nError: ${xhr.responseJSON?.error || 'Unknown error'}`);
+                            showToast('Refinement failed: ' + (xhr.responseJSON?.error || 'Unknown error'), 'error');
+                        }
+                    });
+                });
+
+    
+                let selectedRefineFiles = new Set();
+                let allPseudocodeFiles = [];
+
+                $('#btn-refine-select').on('click', function() {
+                    if (!currentJobId) {
+                        showToast('No job selected', 'error');
+                        return;
+                    }
+                    openRefineSelectModal();
+                });
+
+                $('#btn-refine-all').on('click', function() {
+                    if (!currentJobId) {
+                        showToast('No job selected', 'error');
+                        return;
+                    }
+                  
+                    $('#refine-btn').click();
+                });
+
+                $('#close-refine-select').on('click', closeRefineSelectModal);
+                $('#refine-cancel').on('click', closeRefineSelectModal);
+
+                $('#refine-select-all').on('click', function() {
+                    $('#refine-files-list input[type="checkbox"]').prop('checked', true);
+                    updateSelectedFiles();
+                });
+
+                $('#refine-deselect-all').on('click', function() {
+                    $('#refine-files-list input[type="checkbox"]').prop('checked', false);
+                    updateSelectedFiles();
+                });
+
+                $('#refine-search').on('input', function() {
+                    const searchTerm = $(this).val().toLowerCase();
+                    $('#refine-files-list .file-item').each(function() {
+                        const filename = $(this).data('filename').toLowerCase();
+                        if (filename.includes(searchTerm)) {
+                            $(this).show();
+                        } else {
+                            $(this).hide();
+                        }
+                    });
+                });
+
+                $('#refine-confirm').on('click', function() {
+                    if (selectedRefineFiles.size === 0) {
+                        showToast('No files selected', 'warning');
+                        return;
+                    }
+                    
+                    const $btn = $(this);
+                    $btn.prop('disabled', true).text('Refining...');
+                    
+                    const filesArray = Array.from(selectedRefineFiles);
+                    
+                    renderMessage('assistant', `🔄 **Starting Selective Refinement**\n\nRefining ${filesArray.length} selected pseudocode files for job \`${currentJobId.substring(0, 8)}...\`...\n\n**Files to refine:**\n${filesArray.map(f => `- \`${f}\``).join('\n')}`);
+                    
+                    $.ajax({
+                        url: `/api/jobs/${currentJobId}/refine/selective`,
+                        method: 'POST',
+                        data: JSON.stringify({ files: filesArray }),
+                        contentType: 'application/json',
+                        success: function(data) {
+                            closeRefineSelectModal();
+                            $btn.prop('disabled', false).text('Refine Selected');
+                            
+                            let resultSummary = `🔄 **Selective Refinement Complete**\n\n**Total files processed:** ${data.total_files}\n**Successfully refined:** ${data.success}\n**Errors:** ${data.errors}\n\n`;
+                            
+                            if (data.results && data.results.length > 0) {
+                                resultSummary += `**Processing details:**\n\n`;
+                                data.results.forEach((result, index) => {
+                                    const statusIcon = result.status === 'success' ? '✅' : '❌';
+                                    const statusText = result.status === 'success' ? 'Success' : `Error: ${result.error || 'Unknown'}`;
+                                    resultSummary += `${index + 1}. ${statusIcon} \`${result.addr}\` - ${statusText}\n`;
+                                });
+                            }
+                            
+                            renderMessage('assistant', resultSummary);
+                            showToast(`Refined ${data.success}/${data.total_files} files successfully`, data.success === data.total_files ? 'success' : 'warning');
+                            
+                            if (data.errors > 0) {
+                                console.error('Refinement errors:', data.results.filter(r => r.status === 'error'));
+                            }
+                        },
+                        error: function(xhr) {
+                            closeRefineSelectModal();
+                            $btn.prop('disabled', false).text('Refine Selected');
+                            renderMessage('assistant', `❌ **Refinement Failed**\n\nError: ${xhr.responseJSON?.error || 'Unknown error'}`);
+                            showToast('Refinement failed: ' + (xhr.responseJSON?.error || 'Unknown error'), 'error');
+                        }
+                    });
+                });
+
+                function openRefineSelectModal() {
+                    selectedRefineFiles.clear();
+                    allPseudocodeFiles = [];
+                    $('#refine-select-modal').removeClass('hidden');
+                    loadPseudocodeFiles();
+                }
+
+                function closeRefineSelectModal() {
+                    $('#refine-select-modal').addClass('hidden');
+                    selectedRefineFiles.clear();
+                    allPseudocodeFiles = [];
+                    $('#refine-files-list').empty();
+                    $('#refine-search').val('');
+                    updateSelectedFiles();
+                }
+
+                function loadPseudocodeFiles() {
+                    $('#refine-files-list').html('<div class="text-center py-8 text-gray-500">Loading pseudocode files...</div>');
+                    
+                    $.get(`/api/jobs/${currentJobId}/pseudocode/files`, function(data) {
+                        allPseudocodeFiles = data.files || [];
+                        renderFileList(data.files, data.refined_files || []);
+                    }).fail(function(xhr) {
+                        $('#refine-files-list').html('<div class="text-center py-8 text-red-500">Failed to load pseudocode files</div>');
+                        console.error('Failed to load pseudocode files:', xhr);
+                    });
+                }
+
+                function renderFileList(files, refinedFiles) {
+                    const refinedSet = new Set(refinedFiles);
+                    let html = '';
+                    
+                    files.forEach(file => {
+                        const isRefined = refinedSet.has(file);
+                        html += `
+                            <div class="file-item flex items-center gap-3 p-3 bg-gray-800 rounded-lg border border-gray-700 hover:border-gray-600 transition ${isRefined ? 'opacity-60' : ''}" data-filename="${file}">
+                                <input type="checkbox" class="file-checkbox h-4 w-4 rounded border-gray-600 bg-gray-700 text-purple-600 focus:ring-purple-500 focus:ring-offset-0" 
+                                    data-filename="${file}" ${isRefined ? 'disabled' : ''}>
+                                <div class="flex-1">
+                                    <span class="text-sm text-gray-200 font-mono">${file}</span>
+                                    ${isRefined ? '<span class="ml-2 text-xs text-green-400">(Already refined)</span>' : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    $('#refine-files-list').html(html || '<div class="text-center py-8 text-gray-500">No pseudocode files found</div>');
+                    
+                 
+                    $('.file-checkbox').on('change', function() {
+                        updateSelectedFiles();
+                    });
+                    
+                    $('#refine-total-files').text(`Total: ${files.length} files`);
+                    $('#refine-refined-count').text(`Already refined: ${refinedFiles.length} files`);
+                    updateSelectedFiles();
+                }
+
+                function updateSelectedFiles() {
+                    selectedRefineFiles.clear();
+                    $('.file-checkbox:checked').each(function() {
+                        selectedRefineFiles.add($(this).data('filename'));
+                    });
+                    
+                    const count = selectedRefineFiles.size;
+                    $('#refine-selected-count').text(`Selected: ${count} files`);
+                    $('#refine-confirm').prop('disabled', count === 0).text(`Refine Selected (${count})`);
+                    
+                    if (count === 0) {
+                        $('#refine-selection-summary').text('No files selected');
+                    } else {
+                        $('#refine-selection-summary').text(`${count} file(s) selected for refinement`);
+                    }
+                }
 
                 $(document).on('click', '.delete-job-btn', function() {
                     const jobId = $(this).data('job-id');
@@ -1702,6 +2069,91 @@
                     });
                 }
 
+                function checkGPUStatus() {
+                    $.get('/gpu/status', function (data) {
+                        if (data && data.available) {
+                            const method = data.method || 'unknown';
+                            const name = data.name || 'Unknown GPU';
+                            
+                            let gpuHtml = `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm text-gray-400">GPU Name</span>
+                                    <span class="text-sm font-semibold text-gray-200 truncate ml-2" title="${name}">${name}</span>
+                                </div>
+                            `;
+                            
+                            if (method !== 'fallback') {
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">Method</span>
+                                        <span class="text-xs font-semibold text-indigo-400">${method}</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            if (data.memory_used_mb !== null && data.memory_total_mb !== null) {
+                                const memoryPercent = data.memory_percent !== null ? `(${data.memory_percent}%)` : '';
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">Memory</span>
+                                        <span class="text-sm font-semibold text-blue-400">${data.memory_used_mb}MB / ${data.memory_total_mb}MB ${memoryPercent}</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            if (data.utilization_percent !== null) {
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">GPU Util</span>
+                                        <span class="text-sm font-semibold text-green-400">${data.utilization_percent}%</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            if (data.temperature_c !== null) {
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">Temperature</span>
+                                        <span class="text-sm font-semibold text-yellow-400">${data.temperature_c}°C</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            if (data.power_usage_w !== null && data.power_limit_w !== null) {
+                                const powerPercent = data.power_percent !== null ? `(${data.power_percent}%)` : '';
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">Power</span>
+                                        <span class="text-sm font-semibold text-purple-400">${data.power_usage_w}W / ${data.power_limit_w}W ${powerPercent}</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            if (data.process_count !== null) {
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">Processes</span>
+                                        <span class="text-sm font-semibold text-gray-200">${data.process_count}</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            if (data.note) {
+                                gpuHtml += `
+                                    <div class="text-xs text-gray-500 mt-2 italic">${data.note}</div>
+                                `;
+                            }
+                            
+                            $('#gpu-monitor-content').html(gpuHtml);
+                        } else {
+                            $('#gpu-monitor-content').html('<div class="text-gray-500 text-center py-4 text-sm">GPU not available</div>');
+                        }
+                    }).fail(function (xhr) {
+                        console.error('Failed to check GPU status:', xhr);
+                        $('#gpu-monitor-content').html('<div class="text-gray-500 text-center py-4 text-sm">GPU monitoring unavailable</div>');
+                    });
+                }
+
                 function checkDockerStatus() {
                     $.get('/api/docker/status', function (data) {
                         if (data && data.containers) {
@@ -1721,7 +2173,6 @@
                                 $('#docker-status-text').text('Docker Offline - No containers running');
                             }
                             
-                            // Display container list
                             const containersHtml = data.containers.map(container => {
                                 const healthColor = container.health === 'healthy' ? 'text-green-400' : 
                                                   container.health === 'running' ? 'text-blue-400' :

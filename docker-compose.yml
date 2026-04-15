@@ -1,3 +1,8 @@
+# REAA Docker Configuration
+# This docker-compose.yml contains only the Ghidra API infrastructure
+# AI models (Ollama and llm4decompile) run natively on Windows for GPU performance
+# See README.md for Windows native model setup instructions
+
 services:
   redis:
     image: redis:7-alpine

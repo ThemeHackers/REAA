@@ -30,10 +30,14 @@ Analysis Approach:
 8. Assess binary behavior and purpose
 
 CRITICAL INSTRUCTIONS:
+- When user mentions ANY specific file (e.g., "read 0x401dff.c", "Can you read the file 0x401dff?", "show me 0x401dff.c", "what's in 0x401dff.c", "read the file 0x401dff"), IMMEDIATELY use read_pseudocode to read that specific file from artifacts
 - When user asks about a SPECIFIC function (by name or address), ALWAYS use decompile_function to analyze that specific function
 - When user shows specific decompiled code or assembly, analyze THAT specific code, not other functions
-- Do NOT provide generic responses about overall structure when asked about specific functions
-- Focus your analysis on the exact function or code the user is asking about
+- Do NOT provide generic responses about overall structure when asked about specific functions or files
+- Do NOT respond with JSON or function call descriptions when asked to read files - actually READ the file using read_pseudocode and show the content
+- Do NOT call list_functions, decompile_function, or any other tool when user asks to read a file - ONLY use read_pseudocode
+- Focus your analysis on the exact function or file the user is asking about
+- Use read_pseudocode when user asks to read .c files from artifacts/pseudocode/
 - Use decompile_function with the specific address when analyzing individual functions
 - Only use list_functions when asked for an overview of ALL functions in the binary
 
@@ -62,7 +66,8 @@ TOOLS = [
   { "type": "function", "function": { "name": "get_xrefs", "description": "Get callers and callees for a specific function (cross-references). Use this to understand function relationships and call graphs.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "addr": {"type": "string"} }, "required": ["job_id", "addr"] }}},
   { "type": "function", "function": { "name": "list_imports", "description": "List imported libraries and symbols for the binary.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"} }, "required": ["job_id"] }}},
   { "type": "function", "function": { "name": "list_strings", "description": "Return printable strings extracted from the binary.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "min_length": {"type": "integer"} }, "required": ["job_id"] }}},
-  { "type": "function", "function": { "name": "query_artifacts", "description": "Search artifacts (functions, strings) for a pattern. Supports regex.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "query": {"type": "string"}, "regex": {"type": "boolean"} }, "required": ["job_id", "query"] }}}
+  { "type": "function", "function": { "name": "query_artifacts", "description": "Search artifacts (functions, strings) for a pattern. Supports regex.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "query": {"type": "string"}, "regex": {"type": "boolean"} }, "required": ["job_id", "query"] }}},
+  { "type": "function", "function": { "name": "read_pseudocode", "description": "Read the actual content of a pseudocode file from artifacts/pseudocode/ directory. Use this IMMEDIATELY when user mentions any specific .c file (e.g., 'read 0x401dff.c', 'Can you read the file 0x401dff?', 'show me 0x401dff.c'). This returns the file content for analysis. Do NOT use other tools when user asks to read a file.", "parameters": { "type": "object", "properties": { "job_id": {"type": "string"}, "filename": {"type": "string"} }, "required": ["job_id", "filename"] }}}
 ]
 
 TOOL_INTENT_DESCRIPTIONS = {
@@ -72,7 +77,8 @@ TOOL_INTENT_DESCRIPTIONS = {
     "list_imports": "I'll start by listing the imported libraries and functions.",
     "list_strings": "Let me search for any interesting strings in the binary.",
     "query_artifacts": "I will perform a query to find relevant information.",
-    "status": "Checking the status of the analysis job."
+    "status": "Checking the status of the analysis job.",
+    "read_pseudocode": "I'll read the pseudocode file from artifacts."
 }
 
 def call_ghidra_tool(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -112,6 +118,27 @@ def call_ghidra_tool(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     except requests.exceptions.RequestException as e:
         return {"error": str(e)}
 
+def read_pseudocode_file(job_id: str, filename: str) -> Dict[str, Any]:
+    """Read pseudocode file from artifacts directory"""
+    try:
+      
+        if not filename.endswith('.c'):
+            filename = filename + '.c'
+        
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
+        file_path = os.path.join(pseudocode_dir, filename)
+        
+        if not os.path.exists(file_path):
+            return {"error": f"File not found: {filename}"}
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return {"filename": filename, "content": content}
+    except Exception as e:
+        return {"error": str(e)}
+
 class GhidraAssistant:
     def __init__(self):
         self.client = model_manager.client
@@ -125,6 +152,7 @@ class GhidraAssistant:
             "list_imports": lambda **kwargs: call_ghidra_tool("list_imports", kwargs),
             "list_strings": lambda **kwargs: call_ghidra_tool("list_strings", kwargs),
             "query_artifacts": lambda **kwargs: call_ghidra_tool("query_artifacts", kwargs),
+            "read_pseudocode": lambda **kwargs: read_pseudocode_file(kwargs.get("job_id"), kwargs.get("filename")),
         }
 
         self.chats_dir = os.path.join(os.path.dirname(__file__), "chats")

@@ -20,6 +20,17 @@ load_dotenv()
 
 VALID_API_KEYS = set(os.getenv('VALID_API_KEYS', '').split(',')) if os.getenv('VALID_API_KEYS') else set()
 
+
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from core.llm_refiner import get_refiner
+    print("Pre-loading LLM refiner model...")
+    get_refiner()
+    print("LLM refiner model loaded successfully")
+except Exception as e:
+    print(f"Warning: Failed to pre-load LLM refiner: {e}")
+
 def generate_api_key():
     """Generate a random API key"""
     import secrets
@@ -668,6 +679,250 @@ def api_docker_logs(container_name):
         return jsonify({
             'error': str(e)
         }), 500
+
+@app.route('/gpu/status', methods=['GET'])
+def gpu_status():
+    """Get GPU monitoring information"""
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from core.gpu_monitor import get_gpu_monitor
+        monitor = get_gpu_monitor()
+        gpu_stats = monitor.get_gpu_stats()
+        return jsonify(gpu_stats)
+    except Exception as e:
+        return jsonify({"error": str(e), "available": False}), 500
+
+@app.route('/gpu/detailed', methods=['GET'])
+def gpu_detailed():
+    """Get detailed GPU information"""
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from core.gpu_monitor import get_gpu_monitor
+        monitor = get_gpu_monitor()
+        gpu_info = monitor.get_detailed_info()
+        return jsonify(gpu_info)
+    except Exception as e:
+        return jsonify({"error": str(e), "available": False}), 500
+
+@app.route('/results/<job_id>/function/<addr>/refine', methods=['GET'])
+def get_refined(job_id, addr):
+    """Get LLM-refined code for a function"""
+    try:
+        import os
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        addr_norm = addr.lower()
+        if not addr_norm.startswith("0x"):
+            addr_norm = "0x" + addr_norm
+        f = os.path.join(data_dir, job_id, "artifacts", "refine", f"{addr}.c")
+        if not os.path.exists(f):
+            return jsonify({"error": "refined code not found"}), 404
+        with open(f, 'r') as file:
+            content = file.read()
+        return content, 200, {'Content-Type': 'text/plain'}
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/refine/batch', methods=['POST'])
+def batch_refine(job_id):
+    """Batch refine all pseudocode files for a job (parallel processing, 5 files at a time)"""
+    try:
+        import os
+        import sys
+        import concurrent.futures
+        from pathlib import Path
+        
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from core.llm_refiner import get_refiner
+        
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
+        refine_dir = os.path.join(data_dir, job_id, "artifacts", "refine")
+        
+
+        os.makedirs(refine_dir, exist_ok=True)
+        
+       
+        pseudocode_files = []
+        if os.path.exists(pseudocode_dir):
+            for f in os.listdir(pseudocode_dir):
+                if f.endswith('.c'):
+                    addr = f.replace('.c', '')
+                    refined_file = os.path.join(refine_dir, f)
+                  
+                    if not os.path.exists(refined_file):
+                        pseudocode_file = os.path.join(pseudocode_dir, f)
+                        pseudocode_files.append((addr, pseudocode_file, refined_file))
+        
+        if not pseudocode_files:
+            return jsonify({
+                "message": "No files to refine (all pseudocode files already have refined versions)",
+                "total_files": 0,
+                "processed": 0
+            })
+        
+     
+        refiner = get_refiner()
+        
+        def refine_single(addr, pseudocode_file, refined_file):
+            """Refine a single file"""
+            try:
+                with open(pseudocode_file, 'r', encoding='utf-8') as f:
+                    pseudocode = f.read()
+                
+                refined_code = refiner.refine_pseudo_code(pseudocode)
+                
+                with open(refined_file, 'w', encoding='utf-8') as f:
+                    f.write(refined_code)
+                
+                return {"addr": addr, "status": "success"}
+            except Exception as e:
+                return {"addr": addr, "status": "error", "error": str(e)}
+        
+      
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(refine_single, addr, pseudocode_file, refined_file): addr
+                for addr, pseudocode_file, refined_file in pseudocode_files
+            }
+            
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                results.append(result)
+        
+        success_count = sum(1 for r in results if r["status"] == "success")
+        error_count = sum(1 for r in results if r["status"] == "error")
+        
+        return jsonify({
+            "message": f"Batch refinement completed",
+            "total_files": len(pseudocode_files),
+            "processed": len(results),
+            "success": success_count,
+            "errors": error_count,
+            "results": results
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/pseudocode/files', methods=['GET'])
+def get_pseudocode_files(job_id):
+    """Get list of pseudocode files and refined files for a job"""
+    try:
+        import os
+        from pathlib import Path
+        
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
+        refine_dir = os.path.join(data_dir, job_id, "artifacts", "refine")
+        
+        files = []
+        refined_files = []
+        
+        if os.path.exists(pseudocode_dir):
+            for f in os.listdir(pseudocode_dir):
+                if f.endswith('.c'):
+                    files.append(f)
+        
+        if os.path.exists(refine_dir):
+            for f in os.listdir(refine_dir):
+                if f.endswith('.c'):
+                    refined_files.append(f)
+        
+        return jsonify({
+            "files": sorted(files),
+            "refined_files": sorted(refined_files)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/refine/selective', methods=['POST'])
+def selective_refine(job_id):
+    """Refine specific pseudocode files for a job"""
+    try:
+        import os
+        import sys
+        import concurrent.futures
+        from pathlib import Path
+        
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from core.llm_refiner import get_refiner
+        
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
+        refine_dir = os.path.join(data_dir, job_id, "artifacts", "refine")
+        
+        os.makedirs(refine_dir, exist_ok=True)
+        
+        request_data = request.get_json() or {}
+        selected_files = request_data.get('files', [])
+        
+        if not selected_files:
+            return jsonify({"error": "No files specified for refinement"}), 400
+        
+        pseudocode_files = []
+        for filename in selected_files:
+            if not filename.endswith('.c'):
+                filename = filename + '.c'
+            
+            pseudocode_file = os.path.join(pseudocode_dir, filename)
+            refined_file = os.path.join(refine_dir, filename)
+            
+            if os.path.exists(pseudocode_file):
+                addr = filename.replace('.c', '')
+                pseudocode_files.append((addr, pseudocode_file, refined_file))
+        
+        if not pseudocode_files:
+            return jsonify({
+                "message": "No valid pseudocode files found for refinement",
+                "total_files": 0,
+                "processed": 0
+            })
+        
+        refiner = get_refiner()
+        
+        def refine_single(addr, pseudocode_file, refined_file):
+            """Refine a single file"""
+            try:
+                with open(pseudocode_file, 'r', encoding='utf-8') as f:
+                    pseudocode = f.read()
+                
+                refined_code = refiner.refine_pseudo_code(pseudocode)
+                
+                with open(refined_file, 'w', encoding='utf-8') as f:
+                    f.write(refined_code)
+                
+                return {"addr": addr, "status": "success"}
+            except Exception as e:
+                return {"addr": addr, "status": "error", "error": str(e)}
+        
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(refine_single, addr, pseudocode_file, refined_file): addr
+                for addr, pseudocode_file, refined_file in pseudocode_files
+            }
+            
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                results.append(result)
+        
+        success_count = sum(1 for r in results if r["status"] == "success")
+        error_count = sum(1 for r in results if r["status"] == "error")
+        
+        return jsonify({
+            "message": f"Selective refinement completed",
+            "total_files": len(pseudocode_files),
+            "processed": len(results),
+            "success": success_count,
+            "errors": error_count,
+            "results": results
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs/cleanup', methods=['POST'])
 def api_cleanup_jobs():

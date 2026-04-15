@@ -8,12 +8,13 @@ from pathlib import Path
 from celery import current_task
 from core.celery_app import celery_app
 from core.config import settings
+from core.llm_refiner import get_refiner
 
 log = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, name="core.tasks.run_ghidra_analysis")
-def run_ghidra_analysis(self, job_id: str, binary_path: str, filename: str, persist: bool = False):
+def run_ghidra_analysis(self, job_id: str, binary_path: str, filename: str, persist: bool = False, enable_refinement: bool = False):
     """
     Execute Ghidra headless analysis as a Celery task using PyGhidra new API
     
@@ -22,6 +23,7 @@ def run_ghidra_analysis(self, job_id: str, binary_path: str, filename: str, pers
         binary_path: Path to the binary file
         filename: Original filename
         persist: Whether to keep the Ghidra project after analysis
+        enable_refinement: Whether to enable LLM-based pseudo-code refinement
     """
     proj_dir = settings.DATA_DIR / job_id
     out_dir = proj_dir / "artifacts"
@@ -103,13 +105,22 @@ def run_ghidra_analysis(self, job_id: str, binary_path: str, filename: str, pers
             "job_id": job_id,
             "status": "done",
             "filename": filename,
+            "enable_refinement": enable_refinement,
             "task_id": self.request.id
         }))
+        
+
+        if enable_refinement:
+            self.update_state(state="PROGRESS", meta={"status": "refining", "progress": 80})
+            log.info(f"Starting LLM refinement for job {job_id}")
+            _run_refinement(job_id, out_dir)
+            log.info(f"LLM refinement completed for job {job_id}")
         
         return {
             "job_id": job_id,
             "status": "done",
-            "filename": filename
+            "filename": filename,
+            "refinement_enabled": enable_refinement
         }
         
     except Exception as e:
@@ -162,3 +173,60 @@ def cleanup_old_jobs():
                     log.error(f"Error cleaning up job {job_dir.name}: {e}")
     
     return {"cleaned": cleaned_count, "message": f"Cleaned {cleaned_count} old jobs"}
+
+
+def _run_refinement(job_id: str, artifacts_dir: Path):
+    """
+    Run LLM refinement on all decompiled functions
+    
+    Args:
+        job_id: Job identifier
+        artifacts_dir: Path to the artifacts directory
+    """
+    try:
+        
+        refiner = get_refiner()
+        if not refiner.is_available():
+            log.warning("LLM refiner not available, skipping refinement")
+            return
+        
+    
+        decompile_files = list(artifacts_dir.glob("decompile_*.c"))
+        if not decompile_files:
+            log.warning("No decompiled files found for refinement")
+            return
+        
+      
+        refine_dir = artifacts_dir / "refine"
+        refine_dir.mkdir(exist_ok=True)
+        
+        log.info(f"Found {len(decompile_files)} decompiled files to refine")
+        
+        refined_count = 0
+        for decompile_file in decompile_files:
+            try:
+              
+                filename = decompile_file.name
+              
+                if filename.startswith("decompile_") and filename.endswith(".c"):
+                    address = filename[len("decompile_"):-2]
+                    output_file = refine_dir / f"{address}.c"
+                else:
+                    log.warning(f"Unexpected filename format: {filename}")
+                    continue
+                
+              
+                success = refiner.refine_function_from_file(decompile_file, output_file)
+                if success:
+                    refined_count += 1
+                    log.info(f"Refined {filename} -> {output_file.name}")
+                else:
+                    log.warning(f"Failed to refine {filename}")
+                    
+            except Exception as e:
+                log.error(f"Error refining {decompile_file}: {e}")
+        
+        log.info(f"Refinement completed: {refined_count}/{len(decompile_files)} files refined")
+        
+    except Exception as e:
+        log.error(f"Error during refinement: {e}", exc_info=True)

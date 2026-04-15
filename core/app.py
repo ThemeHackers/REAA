@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from core.config import settings
 from core.celery_app import celery_app
 from core.tasks import run_ghidra_analysis
+from core.llm_refiner import get_refiner
 
 
 structlog.configure(
@@ -169,20 +170,21 @@ def list_jobs():
 
 
 @app.post("/analyze", response_model=AnalyzeResp)
-async def analyze(file: UploadFile = File(None), persist: bool = False):
+async def analyze(file: UploadFile = File(None), persist: bool = False, enable_refinement: bool = False):
     """Upload and analyze a binary file"""
     if file is None:
         raise HTTPException(status_code=400, detail="file is required")
     contents = await file.read()
     if len(contents) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail="file too large")
-    return _launch_analysis(contents, file.filename, persist)
+    return _launch_analysis(contents, file.filename, persist, enable_refinement)
 
 
 class AnalyzeB64Req(BaseModel):
     file_b64: str
     filename: str
     persist: Optional[bool] = False
+    enable_refinement: Optional[bool] = False
 
 
 @app.post("/analyze_b64", response_model=AnalyzeResp)
@@ -194,10 +196,10 @@ async def analyze_b64(payload: AnalyzeB64Req):
         raise HTTPException(status_code=400, detail="invalid base64")
     if len(contents) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail="file too large")
-    return _launch_analysis(contents, payload.filename, bool(payload.persist))
+    return _launch_analysis(contents, payload.filename, bool(payload.persist), bool(payload.enable_refinement))
 
 
-def _launch_analysis(contents: bytes, filename: str, persist: bool) -> Dict[str, Any]:
+def _launch_analysis(contents: bytes, filename: str, persist: bool, enable_refinement: bool = False) -> Dict[str, Any]:
     """
     Launch Ghidra analysis using Celery task queue
     """
@@ -216,7 +218,8 @@ def _launch_analysis(contents: bytes, filename: str, persist: bool) -> Dict[str,
     status_file.write_text(json.dumps({
         "job_id": job_id,
         "status": "queued",
-        "filename": filename
+        "filename": filename,
+        "enable_refinement": enable_refinement
     }))
 
 
@@ -224,7 +227,8 @@ def _launch_analysis(contents: bytes, filename: str, persist: bool) -> Dict[str,
         job_id=job_id,
         binary_path=str(binary_path),
         filename=filename,
-        persist=persist
+        persist=persist,
+        enable_refinement=enable_refinement
     )
 
     log.info(f"Launched Ghidra analysis task {task.id} for job {job_id}")
@@ -298,6 +302,18 @@ def get_decompile(job_id: str, addr: str):
             f = f2
         else:
             raise HTTPException(status_code=404, detail="decompile not found")
+    return PlainTextResponse(content=f.read_text(), media_type="text/plain")
+
+
+@app.get("/results/{job_id}/function/{addr}/refine")
+def get_refined(job_id: str, addr: str):
+    """Get LLM-refined code for a function"""
+    addr_norm = addr.lower()
+    if not addr_norm.startswith("0x"):
+        addr_norm = "0x" + addr_norm
+    f = settings.DATA_DIR / job_id / "artifacts" / "refine" / f"{addr}.c"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="refined code not found")
     return PlainTextResponse(content=f.read_text(), media_type="text/plain")
 
 
@@ -390,6 +406,7 @@ class ToolAnalyzeReq(BaseModel):
     file_b64: str
     filename: str
     persist: Optional[bool] = False
+    enable_refinement: Optional[bool] = False
 
 
 @app.post("/tools/analyze")
@@ -465,3 +482,38 @@ class ToolQueryReq(BaseModel):
 @app.post("/tools/query_artifacts")
 def tools_query(payload: ToolQueryReq):
     return query(payload.dict())
+
+
+@app.get("/refiner/status")
+def refiner_status():
+    """Get LLM refiner status and device information"""
+    try:
+        refiner = get_refiner()
+        device_info = refiner.get_device_info()
+        return JSONResponse(content=device_info)
+    except Exception as e:
+        return JSONResponse(content={"error": str(e), "available": False}, status_code=500)
+
+
+@app.get("/gpu/status")
+def gpu_status():
+    """Get GPU monitoring information"""
+    try:
+        from core.gpu_monitor import get_gpu_monitor
+        monitor = get_gpu_monitor()
+        gpu_stats = monitor.get_gpu_stats()
+        return JSONResponse(content=gpu_stats)
+    except Exception as e:
+        return JSONResponse(content={"error": str(e), "available": False}, status_code=500)
+
+
+@app.get("/gpu/detailed")
+def gpu_detailed():
+    """Get detailed GPU information"""
+    try:
+        from core.gpu_monitor import get_gpu_monitor
+        monitor = get_gpu_monitor()
+        gpu_info = monitor.get_detailed_info()
+        return JSONResponse(content=gpu_info)
+    except Exception as e:
+        return JSONResponse(content={"error": str(e), "available": False}, status_code=500)
