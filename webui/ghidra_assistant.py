@@ -105,7 +105,7 @@ def call_ghidra_tool(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         
         if endpoint in ["list_functions", "list_imports", "list_strings"]:
             response = requests.get(url, params=payload)
-        elif endpoint in ["analyze", "query_artifacts"]:
+        elif endpoint in ["analyze", "query_artifacts", "decompile_function", "get_xrefs"]:
             response = requests.post(url, json=payload)
         else:
             response = requests.get(url)
