@@ -213,7 +213,11 @@ class SecurityAgent:
         
         self.security_dir = os.path.join(os.path.dirname(__file__), "security_analysis")
         if not os.path.exists(self.security_dir):
-            os.makedirs(self.security_dir)
+            try:
+                os.makedirs(self.security_dir)
+            except OSError as e:
+                print(f"Error creating security directory: {e}")
+                self.security_dir = None
 
     def _get_security_file(self, job_id: str) -> str:
         return os.path.join(self.security_dir, f"{job_id}_security.json")
@@ -224,8 +228,8 @@ class SecurityAgent:
             try:
                 with open(security_file, 'r') as f:
                     return json.load(f)
-            except Exception:
-                pass
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"Error loading security history: {e}")
         return []
 
     def save_security_analysis(self, job_id: str, analysis: dict):
@@ -240,7 +244,8 @@ class SecurityAgent:
             try:
                 os.remove(security_file)
                 return True
-            except Exception:
+            except IOError as e:
+                print(f"Error clearing security history: {e}")
                 return False
         return True
 
@@ -277,7 +282,7 @@ class SecurityAgent:
             except json.JSONDecodeError:
                 return {"result": response.text}
         except requests.exceptions.RequestException as e:
-            return {"error": str(e)}
+            return {"error": f"API call to {endpoint} failed: {str(e)}"}
 
     def _analyze_binary_security(self, job_id: str, file_type: str = "unknown", analysis_depth: str = "standard") -> Dict[str, Any]:
         """Comprehensive security analysis"""
@@ -487,7 +492,8 @@ class SecurityAgent:
 
                         try:
                             args = json.loads(tool_call.function.arguments)
-                        except Exception:
+                        except json.JSONDecodeError as e:
+                            print(f"JSON parsing error: {e}")
                             args = {}
 
                         args['job_id'] = job_id

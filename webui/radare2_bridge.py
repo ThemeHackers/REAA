@@ -14,12 +14,12 @@ class Radare2Bridge:
     """Bridge for interacting with radare2 CLI"""
     
     def __init__(self, r2_path: str = None):
-        if r2_path and os.path.exists(r2_path):
+        if r2_path:
             self.r2_path = r2_path
-            print(f"Using custom radare2 path: {r2_path}")
-        elif r2_path:
-            self.r2_path = r2_path
-            print(f"Using provided radare2 path (may not exist): {r2_path}")
+            if os.path.exists(r2_path):
+                print(f"Using custom radare2 path: {r2_path}")
+            else:
+                print(f"Using provided radare2 path (may not exist): {r2_path}")
         elif sys.platform == 'win32':
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             r2_bat_path = os.path.join(project_root, 'radare2-6.1.2-w64', 'bin', 'r2.bat')
@@ -171,8 +171,10 @@ class Radare2Bridge:
             }
             
         except subprocess.TimeoutExpired:
+            self.cleanup()
             return {"error": "Analysis timeout - file may be too large or corrupted"}
         except Exception as e:
+            self.cleanup()
             return {"error": str(e)}
 
     def load_file_only(self, file_path: str) -> Dict[str, Any]:
@@ -202,8 +204,10 @@ class Radare2Bridge:
             }
             
         except subprocess.TimeoutExpired:
+            self.cleanup()
             return {"error": "File info timeout - file may be corrupted"}
         except Exception as e:
+            self.cleanup()
             return {"error": str(e)}
     
     def execute_command(self, command: str, use_enhanced_format: bool = False) -> Dict[str, Any]:
@@ -436,8 +440,9 @@ class Radare2AgentController:
         
         if self.boundaries["read_only"]:
             dangerous_commands = ["w", "wa", "wc", "wf", "w+", "oo+"]
-            if any(d in command for d in dangerous_commands):
-                return False
+            for d in dangerous_commands:
+                if d in cmd_parts:
+                    return False
         
         return True
     

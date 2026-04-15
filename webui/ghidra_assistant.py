@@ -122,7 +122,7 @@ def read_pseudocode_file(job_id: str, filename: str) -> Dict[str, Any]:
     """Read pseudocode file from artifacts directory"""
     try:
       
-        if not filename.endswith('.c'):
+        if not filename.lower().endswith('.c'):
             filename = filename + '.c'
         
         data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
@@ -191,10 +191,7 @@ class GhidraAssistant:
     def chat_completion_stream(self, user_message: str, job_id: str) -> Generator[str, None, None]:
         history = self.load_history(job_id)
 
-        if not history:
-            history.append({"role": "system", "content": SYSTEM_PROMPT})
-
-        if history[0]["role"] != "system":
+        if not history or history[0]["role"] != "system":
             history.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
 
         history.append({"role": "user", "content": f"[Job ID: {job_id}] {user_message}"})
@@ -229,7 +226,8 @@ class GhidraAssistant:
                     function_to_call = self.available_tools[function_name]
                     try:
                         args = json.loads(tool_call.function.arguments)
-                    except Exception:
+                    except json.JSONDecodeError as e:
+                        print(f"JSON parsing error: {e}")
                         args = {}
 
                     args['job_id'] = job_id

@@ -139,13 +139,23 @@ def login():
 def logout():
     """Logout user and invalidate token"""
     try:
-        token = request.headers.get('Authorization', '').split(' ')[1]
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header or ' ' not in auth_header:
+            return jsonify({'error': 'Invalid authorization header format'}), 400
+        
+        parts = auth_header.split(' ')
+        if len(parts) < 2:
+            return jsonify({'error': 'Invalid authorization header format'}), 400
+        
+        token = parts[1]
         auth_manager.invalidate_session(token)
         
         return jsonify({'success': True, 'message': 'Logged out successfully'})
         
+    except (KeyError, IndexError) as e:
+        return jsonify({'error': f'Invalid token format: {str(e)}'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Logout failed: {str(e)}'}), 500
 
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
