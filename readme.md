@@ -129,6 +129,36 @@ Invoke-RestMethod -Uri "http://localhost:11434/api/tags"
 curl http://localhost:11434/api/tags
 ```
 
+**Hugging Face Authentication (Recommended):**
+
+Some models require Hugging Face authentication for faster downloads and access to restricted models. Installing HF CLI and logging in will:
+
+- **Increase download speed** - Higher rate limits for authenticated users
+- **Access restricted models** - Some models are only available to authenticated users
+- **Avoid rate limiting** - Prevent download throttling
+
+```bash
+# Install Hugging Face CLI for Windows
+powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"
+
+# Login to Hugging Face
+hf auth login
+
+# Follow the prompts to:
+# 1. Open https://huggingface.co/settings/tokens
+# 2. Create a new access token (select "Read" permission)
+# 3. Paste the token when prompted
+# 4. Add token as git credential (optional but recommended)
+
+# Verify login
+hf auth whoami
+```
+
+**Note:** Without HF_TOKEN, you may encounter:
+- Slower model downloads
+- Rate limiting errors
+- Inability to access certain restricted models
+
 **LLM4Decompile Models (for Pseudocode Refinement):**
 
 Available models for decompilation refinement:
