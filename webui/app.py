@@ -17,6 +17,10 @@ from model import model_manager
 from models import db, User
 from auth import auth_manager, token_required
 
+from webui.active_re_agent import get_active_re_agent
+from webui.orchestrator_agent import get_orchestrator_agent
+from webui.report_agent import get_report_agent
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -2803,6 +2807,240 @@ def handle_job_status_request(data):
 @socketio.on('heartbeat')
 def handle_heartbeat(sid):
     emit('heartbeat_response', {'timestamp': datetime.datetime.now().isoformat()})
+
+@app.route('/api/active-re/plan', methods=['POST'])
+def active_re_plan():
+    try:
+        data = request.get_json()
+        binary_path = data.get('binary_path')
+        analysis_goal = data.get('analysis_goal')
+        binary_type = data.get('binary_type')
+
+        if not binary_path or not analysis_goal:
+            return jsonify({"error": "binary_path and analysis_goal are required"}), 400
+
+        active_re_agent = get_active_re_agent()
+        plan = active_re_agent.plan_execution_strategy(binary_path, analysis_goal)
+
+        return jsonify(plan)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/active-re/execute', methods=['POST'])
+def active_re_execute():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        binary_path = data.get('binary_path')
+        script_content = data.get('script_content')
+
+        if not job_id or not binary_path:
+            return jsonify({"error": "job_id and binary_path are required"}), 400
+
+        active_re_agent = get_active_re_agent()
+        result = active_re_agent.execute_with_frida(binary_path, script_content)
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/active-re/monitor', methods=['POST'])
+def active_re_monitor():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        duration = data.get('duration', 30)
+
+        if not job_id:
+            return jsonify({"error": "job_id is required"}), 400
+
+        active_re_agent = get_active_re_agent()
+        result = active_re_agent.monitor_execution(job_id, duration)
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/active-re/chat', methods=['POST'])
+def active_re_chat():
+    try:
+        data = request.get_json()
+        message = data.get('message')
+
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+
+        active_re_agent = get_active_re_agent()
+        response = active_re_agent.chat_completion_stream(message)
+
+        return jsonify({"response": response})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/orchestrator/plan', methods=['POST'])
+def orchestrator_plan():
+    try:
+        data = request.get_json()
+        binary_path = data.get('binary_path')
+        user_request = data.get('user_request')
+        binary_type = data.get('binary_type')
+
+        if not binary_path or not user_request:
+            return jsonify({"error": "binary_path and user_request are required"}), 400
+
+        orchestrator = get_orchestrator_agent()
+        strategy = orchestrator.decide_analysis_strategy(binary_path, user_request, binary_type)
+
+        return jsonify(strategy)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/orchestrator/execute', methods=['POST'])
+def orchestrator_execute():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        binary_path = data.get('binary_path')
+        strategy = data.get('strategy')
+
+        if not job_id or not binary_path or not strategy:
+            return jsonify({"error": "job_id, binary_path, and strategy are required"}), 400
+
+        orchestrator = get_orchestrator_agent()
+        result = orchestrator.execute_analysis(job_id, binary_path, strategy)
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/orchestrator/approvals', methods=['GET'])
+def orchestrator_approvals():
+    try:
+        orchestrator = get_orchestrator_agent()
+        approvals = orchestrator.get_pending_approvals()
+
+        return jsonify({"approvals": approvals})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/orchestrator/approve', methods=['POST'])
+def orchestrator_approve():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        approved = data.get('approved', True)
+
+        if not job_id:
+            return jsonify({"error": "job_id is required"}), 400
+
+        orchestrator = get_orchestrator_agent()
+        result = orchestrator.approve_operation(job_id, approved)
+
+        return jsonify({"success": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/orchestrator/tasks', methods=['GET'])
+def orchestrator_tasks():
+    try:
+        orchestrator = get_orchestrator_agent()
+        tasks = orchestrator.get_all_tasks()
+
+        return jsonify(tasks)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/orchestrator/tasks/<job_id>', methods=['GET'])
+def orchestrator_task_status(job_id):
+    try:
+        orchestrator = get_orchestrator_agent()
+        task = orchestrator.get_task_status(job_id)
+
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+
+        return jsonify(task)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/report/generate', methods=['POST'])
+def report_generate():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        analysis_results = data.get('analysis_results')
+        output_format = data.get('output_format', 'json')
+
+        if not job_id or not analysis_results:
+            return jsonify({"error": "job_id and analysis_results are required"}), 400
+
+        report_agent = get_report_agent()
+        report = report_agent.generate_comprehensive_report(job_id, analysis_results, output_format)
+
+        return jsonify(report)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/rag/search', methods=['POST'])
+def rag_search():
+    try:
+        data = request.get_json()
+        query = data.get('query')
+        collections = data.get('collections')
+        n_results = data.get('n_results')
+
+        if not query:
+            return jsonify({"error": "query is required"}), 400
+
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from core.retriever import get_retriever
+
+        retriever = get_retriever()
+        results = retriever.retrieve_context(query, collections, n_results)
+
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/rag/similar-functions', methods=['POST'])
+def rag_similar_functions():
+    try:
+        data = request.get_json()
+        function_code = data.get('function_code')
+        n_results = data.get('n_results')
+
+        if not function_code:
+            return jsonify({"error": "function_code is required"}), 400
+
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from core.retriever import get_retriever
+
+        retriever = get_retriever()
+        results = retriever.retrieve_similar_functions(function_code, n_results)
+
+        return jsonify({"results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/rag/vulnerabilities', methods=['POST'])
+def rag_vulnerabilities():
+    try:
+        data = request.get_json()
+        code_snippet = data.get('code_snippet')
+        n_results = data.get('n_results')
+
+        if not code_snippet:
+            return jsonify({"error": "code_snippet is required"}), 400
+
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from core.retriever import get_retriever
+
+        retriever = get_retriever()
+        results = retriever.retrieve_vulnerability_patterns(code_snippet, n_results)
+
+        return jsonify({"results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 def signal_handler(sig, frame):
    

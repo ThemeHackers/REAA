@@ -45,7 +45,6 @@ build/
 
 
 .dockerignore
-RD/
 
 *.gpr
 *.gzf

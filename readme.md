@@ -29,6 +29,14 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 - **Analysis Properties**: Customizable analysis parameters
 - **Program Info Management**: Metadata and documentation
 
+### Active Reverse Engineering (NEW)
+- **Dynamic Execution**: Run binaries in isolated Docker sandbox
+- **Frida Instrumentation**: Runtime API call and memory monitoring
+- **angr Symbolic Execution**: Path exploration and constraint solving
+- **pwndbg Integration**: Enhanced debugging with heap analysis
+- **Multi-Agent System**: Orchestrated analysis with AI agents
+- **RAG System**: Context-aware retrieval from analysis history
+
 ## 🏗️ Architecture
 
 ```
@@ -51,18 +59,34 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 │  ┌─────────────┐      ┌─────────────┐      ┌──────────────┐ │
 │  │   WebUI     │─────▶│  FastAPI    │◀─────│  Celery     │ │
 │  │  (Flask)    │      │   (REST)    │      │  Worker      │ │
-│  └─────────────┘      └─────────────┘      └──────────────┘ │
-│       │                    │                     │          │
-│       │                    │                     ▼          │
-│       │                    │              ┌──────────────┐  │
-│       │                    │              │   Ghidra     │  │
-│       │                    │              │  12.0.4      │  │
-│       │                    │              └──────────────┘  │
-│       ▼                    ▼                     │          │
-│  ┌─────────────┐      ┌─────────────┐            │          │
-│  │   Redis     │      │  Radare2    │            │          │
-│  │  (Broker)   │      │  (CLI)      │            │          │
-│  └─────────────┘      └─────────────┘            │          │
+│  │             │      │             │      └──────────────┘ │
+│  │  + Agents   │      │             │                     │
+│  └─────────────┘      └─────────────┘                     │
+│       │                    │                                 │
+│       │                    │                                 │
+│       ▼                    ▼                                 │
+│  ┌─────────────┐      ┌─────────────┐                     │
+│  │   Redis     │      │  Radare2    │                     │
+│  │  (Broker)   │      │  (CLI)      │                     │
+│  └─────────────┘      └─────────────┘                     │
+└─────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Active RE Docker Sandbox (NEW)                 │
+│  ┌─────────────┐      ┌─────────────┐      ┌──────────────┐ │
+│  │   Frida     │      │    angr     │      │   pwndbg     │ │
+│  │ Instrument  │      │  Symbolic   │      │  Enhanced    │ │
+│  └─────────────┘      └─────────────┘      │  Debugging   │ │
+│                                             └──────────────┘ │
+│  ┌─────────────┐      ┌─────────────┐                      │
+│  │   Procmon   │      │  Wireshark  │                      │
+│  │  Monitor    │      │  Capture    │                      │
+│  └─────────────┘      └─────────────┘                      │
+│  ┌───────────────────────────────────────────────────────┐ │
+│  │              Vector Database (ChromaDB)                 │ │
+│  │              RAG System + Knowledge Base                │ │
+│  └───────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -255,6 +279,39 @@ LOG_LEVEL=INFO
 ADMIN_USERNAME='It's up to you'
 ADMIN_EMAIL='It's up to you'
 ADMIN_PASSWORD='It's up to you'
+
+ACTIVE_RE_ENABLED=true
+ACTIVE_RE_SANDBOX_IMAGE=reaa/active-re:latest
+ACTIVE_RE_NETWORK_MODE=bridge
+ACTIVE_RE_NETWORK_ISOLATED=true
+ACTIVE_RE_TIMEOUT=300
+ACTIVE_RE_MAX_MEMORY=2GB
+ACTIVE_RE_MAX_CPU=2.0
+
+FRIDA_SCRIPTS_DIR=/app/frida_scripts
+FRIDA_DEVICE_TIMEOUT=60
+
+ANGR_ENABLED=true
+ANGR_LLM_MODEL=llama3.2:3b
+ANGR_LLM_API_BASE=http://localhost:11434/v1
+ANGR_LLM_API_KEY=
+ANGR_SYMBOLIC_EXECUTION_TIMEOUT=300
+
+PWNBG_ENABLED=true
+PWNBG_GDB_PATH=/usr/bin/gdb
+PWNBG_HEAP_ANALYSIS_ENABLED=true
+PWNBG_MEMORY_VISUALIZATION_ENABLED=true
+
+VECTOR_DB_TYPE=chromadb
+VECTOR_DB_PATH=./data/vector_db
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+RAG_TOP_K=5
+RAG_SIMILARITY_THRESHOLD=0.7
+
+ORCHESTRATOR_ENABLED=true
+HUMAN_APPROVAL_REQUIRED=true
+AGENT_MAX_TURNS=10
+AGENT_TIMEOUT=120
 ```
 
 ## 📊 Analysis Output
@@ -303,6 +360,16 @@ Each analysis generates comprehensive artifacts:
 - **Refine All**: Batch refine all pseudocode files
 - **Selective Refine**: Choose specific files to refine
 - **LLM Integration**: Uses llm4decompile model
+
+### Active Reverse Engineering (NEW)
+- **Execution Planning**: Plan dynamic analysis strategies
+- **Sandbox Execution**: Run binaries in isolated Docker containers
+- **Frida Scripts**: Use pre-defined or custom Frida instrumentation
+- **Symbolic Execution**: Explore execution paths with angr
+- **Enhanced Debugging**: Use pwndbg for heap analysis
+- **Multi-Agent Coordination**: Orchestrated analysis with AI agents
+- **Report Generation**: Comprehensive security reports
+- **RAG Retrieval**: Search analysis history for context
 
 ### Export
 - **Export Results**: Download analysis artifacts
@@ -374,6 +441,22 @@ Each analysis generates comprehensive artifacts:
 - `GET /gpu/detailed` - Detailed GPU info
 - `GET /api/remote/health` - Remote collaboration health
 
+### Active Reverse Engineering (NEW)
+- `POST /api/active-re/plan` - Plan Active RE execution strategy
+- `POST /api/active-re/execute` - Execute binary with Frida instrumentation
+- `POST /api/active-re/monitor` - Monitor binary execution
+- `POST /api/active-re/chat` - Chat with Active RE agent
+- `POST /api/orchestrator/plan` - Plan analysis strategy with orchestrator
+- `POST /api/orchestrator/execute` - Execute orchestrated analysis
+- `GET /api/orchestrator/approvals` - Get pending approval requests
+- `POST /api/orchestrator/approve` - Approve or reject operation
+- `GET /api/orchestrator/tasks` - Get all orchestrator tasks
+- `GET /api/orchestrator/tasks/{job_id}` - Get specific task status
+- `POST /api/report/generate` - Generate comprehensive security report
+- `POST /api/rag/search` - Search RAG knowledge base
+- `POST /api/rag/similar-functions` - Find similar functions
+- `POST /api/rag/vulnerabilities` - Search vulnerability patterns
+
 ## ️ Troubleshooting
 
 ### AI Model Issues
@@ -423,7 +506,124 @@ docker-compose logs celery-worker
 docker-compose restart celery-worker
 ```
 
-## 📚 Additional Resources
+## � Active Reverse Engineering Usage
+
+### Starting Active RE Analysis
+
+1. **Build the Active RE Docker image**:
+```bash
+cd docker/active-re
+docker-compose build
+```
+
+2. **Start the Active RE sandbox**:
+```bash
+docker-compose up -d
+```
+
+3. **Plan an execution strategy**:
+```bash
+curl -X POST http://127.0.0.1:5000/api/active-re/plan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "binary_path": "/path/to/binary.exe",
+    "analysis_goal": "vulnerability detection",
+    "binary_type": "exe"
+  }'
+```
+
+4. **Execute with Frida instrumentation**:
+```bash
+curl -X POST http://127.0.0.1:5000/api/active-re/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "binary_path": "/path/to/binary.exe"
+  }'
+```
+
+5. **Monitor execution**:
+```bash
+curl -X POST http://127.0.0.1:5000/api/active-re/monitor \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "duration": 30
+  }'
+```
+
+### Using the Orchestrator
+
+The orchestrator agent coordinates multiple analysis tools:
+
+```bash
+# Plan analysis strategy
+curl -X POST http://127.0.0.1:5000/api/orchestrator/plan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "binary_path": "/path/to/binary.exe",
+    "user_request": "Perform comprehensive security analysis",
+    "binary_type": "exe"
+  }'
+
+# Execute orchestrated analysis
+curl -X POST http://127.0.0.1:5000/api/orchestrator/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "binary_path": "/path/to/binary.exe",
+    "strategy": {...}
+  }'
+
+# Check for pending approvals
+curl http://127.0.0.1:5000/api/orchestrator/approvals
+
+# Approve or reject operation
+curl -X POST http://127.0.0.1:5000/api/orchestrator/approve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "approved": true
+  }'
+```
+
+### RAG System Usage
+
+Search the knowledge base for similar functions and vulnerabilities:
+
+```bash
+# Search for similar functions
+curl -X POST http://127.0.0.1:5000/api/rag/similar-functions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_code": "int main() { return 0; }",
+    "n_results": 5
+  }'
+
+# Search for vulnerability patterns
+curl -X POST http://127.0.0.1:5000/api/rag/vulnerabilities \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code_snippet": "strcpy(buffer, input)",
+    "n_results": 5
+  }'
+```
+
+### Report Generation
+
+Generate comprehensive security reports:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/report/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "analysis_results": {...},
+    "output_format": "html"
+  }'
+```
+
+## �📚 Additional Resources
 
 - [Ghidra Documentation](https://ghidra-sre.org/)
 - [PyGhidra Documentation](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)

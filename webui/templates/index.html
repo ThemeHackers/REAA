@@ -589,6 +589,116 @@
 
 
             <div class="p-6 border-b border-gray-800">
+                <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between gap-2 cursor-pointer"
+                    id="toggle-active-re-section">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 10V3L4 14h7v7l9-11h-7z">
+                            </path>
+                        </svg>
+                        Active Reverse Engineering
+                    </div>
+                    <svg id="active-re-chevron" class="w-4 h-4 text-gray-400 transition-transform" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </h2>
+                <div id="active-re-content" class="space-y-3">
+                    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                        <h3 class="text-sm font-semibold text-gray-200 mb-3">Dynamic Analysis</h3>
+                        <div class="space-y-2">
+                            <button id="active-re-plan-btn"
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01">
+                                    </path>
+                                </svg>
+                                Plan Strategy
+                            </button>
+                            <button id="active-re-execute-btn"
+                                class="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                                    </path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                                    </path>
+                                </svg>
+                                Execute with Frida
+                            </button>
+                            <button id="active-re-monitor-btn"
+                                class="w-full bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                                    </path>
+                                </svg>
+                                Monitor Execution
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                        <h3 class="text-sm font-semibold text-gray-200 mb-3">Orchestrator</h3>
+                        <div class="space-y-2">
+                            <button id="orchestrator-plan-btn"
+                                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z">
+                                    </path>
+                                </svg>
+                                Plan Analysis
+                            </button>
+                            <button id="orchestrator-execute-btn"
+                                class="w-full bg-pink-600 hover:bg-pink-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 10V3L4 14h7v7l9-11h-7z">
+                                    </path>
+                                </svg>
+                                Execute Analysis
+                            </button>
+                            <button id="orchestrator-approve-btn"
+                                class="w-full bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M5 13l4 4L19 7">
+                                    </path>
+                                </svg>
+                                Approve Operation
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                        <h3 class="text-sm font-semibold text-gray-200 mb-3">Reports & RAG</h3>
+                        <div class="space-y-2">
+                            <button id="report-generate-btn"
+                                class="w-full bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                                    </path>
+                                </svg>
+                                Generate Report
+                            </button>
+                            <button id="rag-search-btn"
+                                class="w-full bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z">
+                                    </path>
+                                </svg>
+                                Search Knowledge Base
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 border-b border-gray-800">
                 <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
                     <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -2584,6 +2694,219 @@
                     $('#ghidra-url-input').val(savedGhidraUrl);
 
                     $('#settings-modal').removeClass('hidden');
+                });
+
+                $('#toggle-active-re-section').on('click', function () {
+                    const $content = $('#active-re-content');
+                    const $icon = $('#active-re-chevron');
+                    $content.toggleClass('hidden');
+                    $icon.toggleClass('rotate-180');
+                });
+
+                $('#active-re-plan-btn').on('click', function () {
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'error');
+                        return;
+                    }
+                    const binaryPath = prompt('Enter binary path:');
+                    const analysisGoal = prompt('Enter analysis goal:');
+                    if (!binaryPath || !analysisGoal) return;
+
+                    $.ajax({
+                        url: '/api/active-re/plan',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            binary_path: binaryPath,
+                            analysis_goal: analysisGoal,
+                            binary_type: 'exe'
+                        }),
+                        success: function (data) {
+                            showToast('Execution plan generated successfully', 'success');
+                            console.log('Plan:', data);
+                        },
+                        error: function (err) {
+                            showToast('Failed to generate plan: ' + err.responseText, 'error');
+                        }
+                    });
+                });
+
+                $('#active-re-execute-btn').on('click', function () {
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'error');
+                        return;
+                    }
+                    const binaryPath = prompt('Enter binary path:');
+                    if (!binaryPath) return;
+
+                    $.ajax({
+                        url: '/api/active-re/execute',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            job_id: currentJobId,
+                            binary_path: binaryPath
+                        }),
+                        success: function (data) {
+                            showToast('Execution started successfully', 'success');
+                            console.log('Execution:', data);
+                        },
+                        error: function (err) {
+                            showToast('Failed to execute: ' + err.responseText, 'error');
+                        }
+                    });
+                });
+
+                $('#active-re-monitor-btn').on('click', function () {
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'error');
+                        return;
+                    }
+                    const duration = prompt('Enter monitoring duration (seconds):', '30');
+                    if (!duration) return;
+
+                    $.ajax({
+                        url: '/api/active-re/monitor',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            job_id: currentJobId,
+                            duration: parseInt(duration)
+                        }),
+                        success: function (data) {
+                            showToast('Monitoring completed successfully', 'success');
+                            console.log('Monitoring:', data);
+                        },
+                        error: function (err) {
+                            showToast('Failed to monitor: ' + err.responseText, 'error');
+                        }
+                    });
+                });
+
+                $('#orchestrator-plan-btn').on('click', function () {
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'error');
+                        return;
+                    }
+                    const binaryPath = prompt('Enter binary path:');
+                    const userRequest = prompt('Enter analysis request:');
+                    if (!binaryPath || !userRequest) return;
+
+                    $.ajax({
+                        url: '/api/orchestrator/plan',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            binary_path: binaryPath,
+                            user_request: userRequest,
+                            binary_type: 'exe'
+                        }),
+                        success: function (data) {
+                            showToast('Orchestrator plan generated successfully', 'success');
+                            console.log('Orchestrator Plan:', data);
+                        },
+                        error: function (err) {
+                            showToast('Failed to generate orchestrator plan: ' + err.responseText, 'error');
+                        }
+                    });
+                });
+
+                $('#orchestrator-execute-btn').on('click', function () {
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'error');
+                        return;
+                    }
+                    const binaryPath = prompt('Enter binary path:');
+                    if (!binaryPath) return;
+
+                    $.ajax({
+                        url: '/api/orchestrator/execute',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            job_id: currentJobId,
+                            binary_path: binaryPath,
+                            strategy: { mode: 'static', agents_to_use: ['ghidra', 'security'] }
+                        }),
+                        success: function (data) {
+                            showToast('Orchestrator execution started successfully', 'success');
+                            console.log('Orchestrator Execution:', data);
+                        },
+                        error: function (err) {
+                            showToast('Failed to execute orchestrator: ' + err.responseText, 'error');
+                        }
+                    });
+                });
+
+                $('#orchestrator-approve-btn').on('click', function () {
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'error');
+                        return;
+                    }
+                    const approved = confirm('Approve this operation?');
+
+                    $.ajax({
+                        url: '/api/orchestrator/approve',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            job_id: currentJobId,
+                            approved: approved
+                        }),
+                        success: function (data) {
+                            showToast('Operation ' + (approved ? 'approved' : 'rejected'), 'success');
+                        },
+                        error: function (err) {
+                            showToast('Failed to approve: ' + err.responseText, 'error');
+                        }
+                    });
+                });
+
+                $('#report-generate-btn').on('click', function () {
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'error');
+                        return;
+                    }
+
+                    $.ajax({
+                        url: '/api/report/generate',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            job_id: currentJobId,
+                            analysis_results: {},
+                            output_format: 'json'
+                        }),
+                        success: function (data) {
+                            showToast('Report generated successfully', 'success');
+                            console.log('Report:', data);
+                        },
+                        error: function (err) {
+                            showToast('Failed to generate report: ' + err.responseText, 'error');
+                        }
+                    });
+                });
+
+                $('#rag-search-btn').on('click', function () {
+                    const query = prompt('Enter search query:');
+                    if (!query) return;
+
+                    $.ajax({
+                        url: '/api/rag/search',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            query: query,
+                            n_results: 5
+                        }),
+                        success: function (data) {
+                            showToast('RAG search completed successfully', 'success');
+                            console.log('RAG Results:', data);
+                        },
+                        error: function (err) {
+                            showToast('Failed to search RAG: ' + err.responseText, 'error');
+                        }
+                    });
                 });
 
                 $('#pseudocode-btn').on('click', function () {
