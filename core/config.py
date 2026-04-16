@@ -43,12 +43,16 @@ class Settings(BaseSettings):
     OLLAMA_TEMPERATURE: float = 0.7
     
 
-    LLM4DECOMPILE_MODEL_PATH: Optional[str] = None
+    LLM4DECOMPILE_MODEL_PATH: Optional[str] = "LLM4Binary/llm4decompile-1.3b-v2"
     LLM4DECOMPILE_DEVICE: str = "auto"
-    LLM4DECOMPILE_DTYPE: str = "float16"
+    LLM4DECOMPILE_DTYPE: str = "bfloat16"
     LLM4DECOMPILE_MAX_MEMORY: Optional[str] = None
     LLM4DECOMPILE_QUANTIZATION: Optional[str] = None
     LLM4DECOMPILE_MAX_NEW_TOKENS: int = 2048
+    LLM4DECOMPILE_TEMPERATURE: float = 0.2
+    LLM4DECOMPILE_REPETITION_PENALTY: float = 1.0
+    LLM4DECOMPILE_TOP_P: float = 0.95
+    LLM4DECOMPILE_TOP_K: int = 50
     
     class Config:
         env_file = ".env"

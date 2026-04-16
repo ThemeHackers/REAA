@@ -59,7 +59,7 @@ services:
         - linux/amd64
     container_name: ghidra-celery-worker
     restart: unless-stopped
-    command: celery -A core.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A core.celery_app worker --loglevel=info --concurrency=5
     volumes:
       - ./data:/data/ghidra_projects
       - ./core:/app/core

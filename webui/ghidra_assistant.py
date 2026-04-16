@@ -255,14 +255,17 @@ class GhidraAssistant:
                 complete_response_content += content
                 yield json.dumps({"type": "token", "content": content})
 
-        messages.append({"role": "assistant", "content": complete_response_content})
+        if complete_response_content:
+            messages.append({"role": "assistant", "content": complete_response_content})
 
         serializable_history = []
         for m in messages:
             if isinstance(m, dict):
                 serializable_history.append(m)
             else:
-                d = {"role": m.role, "content": m.content}
+                d = {"role": m.role}
+                if m.content:
+                    d["content"] = m.content
                 if m.tool_calls:
                     d["tool_calls"] = []
                     for tc in m.tool_calls:

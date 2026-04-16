@@ -24,31 +24,54 @@ class GPUMonitor:
     
     def _check_gpu_available(self) -> bool:
         """Check if NVIDIA GPU is available using multiple methods"""
-        
+
+        if self._try_pynvml():
+            self._monitoring_method = "pynvml"
+            self._available = True
+            log.info("GPU monitoring available via pyNVML (preferred)")
+            return True
+
         if self._try_nvidia_smi():
             self._monitoring_method = "nvidia-smi"
             self._available = True
             log.info("GPU monitoring available via nvidia-smi")
             return True
-        
-     
+
         if self._try_pytorch_cuda():
             self._monitoring_method = "pytorch"
             self._available = True
             log.info("GPU monitoring available via PyTorch CUDA")
             return True
-        
-      
+
         if self._try_platform_specific():
             self._monitoring_method = "platform"
             self._available = True
             log.info("GPU monitoring available via platform-specific method")
             return True
-        
+
         log.warning("GPU monitoring not available - no suitable method found")
         self._available = False
         return False
-    
+
+    def _try_pynvml(self) -> bool:
+        """Try to use pyNVML for GPU monitoring"""
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            device_count = pynvml.nvmlDeviceGetCount()
+            if device_count > 0:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                gpu_name = pynvml.nvmlDeviceGetName(handle)
+                self._gpu_info['name'] = gpu_name
+                self._gpu_info['device_count'] = device_count
+                pynvml.nvmlShutdown()
+                return True
+        except ImportError:
+            log.debug("pyNVML not available")
+        except Exception as e:
+            log.debug(f"pyNVML check failed: {e}")
+        return False
+
     def _try_nvidia_smi(self) -> bool:
         """Try to use nvidia-smi for GPU monitoring"""
         try:
@@ -131,7 +154,7 @@ class GPUMonitor:
     def get_gpu_stats(self) -> Dict[str, Any]:
         """
         Get current GPU statistics with fallbacks
-        
+
         Returns:
             Dict with GPU information including:
             - available: Whether GPU monitoring is available
@@ -144,6 +167,10 @@ class GPUMonitor:
             - temperature: GPU temperature in Celsius
             - power_usage: Power usage in watts
             - power_limit: Power limit in watts
+            - gpu_clock_mhz: GPU graphics clock speed in MHz
+            - memory_clock_base_mhz: Base memory clock speed in MHz
+            - memory_clock_effective_mhz: Effective memory clock speed in MHz (x2 for GDDR)
+            - fan_speed_percent: Fan speed percentage
             - processes: Number of processes using GPU
         """
         if not self._available:
@@ -153,7 +180,10 @@ class GPUMonitor:
                 "error": "GPU monitoring not available"
             }
         
-      
+
+        if self._monitoring_method == "pynvml":
+            return self._get_stats_pynvml()
+
         if self._monitoring_method == "nvidia-smi":
             return self._get_stats_nvidia_smi()
         elif self._monitoring_method == "pytorch":
@@ -162,12 +192,115 @@ class GPUMonitor:
             return self._get_stats_platform()
         else:
             return self._get_stats_fallback()
-    
+
+    def _get_stats_pynvml(self) -> Dict[str, Any]:
+        """Get GPU stats using pyNVML (NVML library) - most efficient method"""
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+
+
+            name = pynvml.nvmlDeviceGetName(handle)
+
+
+            memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            memory_used_mb = memory_info.used // (1024 * 1024)
+            memory_total_mb = memory_info.total // (1024 * 1024)
+            memory_percent = round((memory_info.used / memory_info.total) * 100, 2)
+
+         
+            utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            utilization_percent = utilization.gpu
+
+          
+            try:
+                temperature = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            except:
+                temperature = None
+
+
+            try:
+                power_usage = pynvml.nvmlDeviceGetPowerUsage(handle)
+             
+                power_usage = power_usage / 1000.0 if power_usage else None
+            except:
+                power_usage = None
+
+            try:
+                power_limit = pynvml.nvmlDeviceGetPowerManagementLimit(handle)
+             
+                power_limit = power_limit / 1000.0 if power_limit else None
+            except:
+                power_limit = None
+
+            power_percent = round((power_usage / power_limit) * 100, 2) if power_usage and power_limit else None
+
+           
+            try:
+                graphics_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_GRAPHICS)
+                gpu_clock_mhz = graphics_clock
+            except:
+                gpu_clock_mhz = None
+
+       
+            try:
+                memory_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
+              
+                memory_clock_base_mhz = memory_clock
+                memory_clock_effective_mhz = memory_clock
+            except:
+                memory_clock_base_mhz = None
+                memory_clock_effective_mhz = None
+
+          
+            try:
+                fan_speed = pynvml.nvmlDeviceGetFanSpeed(handle)
+                fan_speed_percent = fan_speed
+            except:
+                fan_speed_percent = None
+
+          
+            try:
+                processes = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
+                process_count = len(processes)
+            except:
+                process_count = None
+
+            pynvml.nvmlShutdown()
+
+            return {
+                "available": True,
+                "method": "pynvml",
+                "name": name,
+                "memory_used_mb": memory_used_mb,
+                "memory_total_mb": memory_total_mb,
+                "memory_percent": memory_percent,
+                "utilization_percent": utilization_percent,
+                "temperature_c": temperature,
+                "power_usage_w": power_usage,
+                "power_limit_w": power_limit,
+                "power_percent": power_percent,
+                "gpu_clock_mhz": gpu_clock_mhz,
+                "memory_clock_base_mhz": memory_clock_base_mhz,
+                "memory_clock_effective_mhz": memory_clock_effective_mhz,
+                "fan_speed_percent": fan_speed_percent,
+                "process_count": process_count
+            }
+        except ImportError:
+            log.debug("pyNVML not available, falling back")
+            return self._get_stats_fallback()
+        except Exception as e:
+            log.error(f"Error getting GPU stats via pyNVML: {e}")
+            return self._get_stats_fallback()
+
     def _get_stats_nvidia_smi(self) -> Dict[str, Any]:
         """Get GPU stats using nvidia-smi"""
         try:
-          
+
             queries = [
+                ['nvidia-smi', '--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,clocks.current.graphics,clocks.current.memory,fan.speed', '--format=csv,noheader,nounits'],
                 ['nvidia-smi', '--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit', '--format=csv,noheader,nounits'],
                 ['nvidia-smi', '--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu', '--format=csv,noheader,nounits'],
             ]
@@ -190,8 +323,15 @@ class GPUMonitor:
                         temperature = int(values[4].strip()) if len(values) > 4 else 0
                         power_usage = float(values[5].strip()) if len(values) > 5 else 0
                         power_limit = float(values[6].strip()) if len(values) > 6 else 0
+                        graphics_clock_mhz = int(values[7].strip()) if len(values) > 7 else 0
+                        memory_clock_base_mhz = int(values[8].strip()) if len(values) > 8 else 0
+                        fan_speed_percent = int(values[9].strip()) if len(values) > 9 else 0
+
+
                         
-                       
+                        memory_clock_effective_mhz = memory_clock_base_mhz * 2
+
+
                         try:
                             process_result = subprocess.run(
                                 ['nvidia-smi', '--query-compute-apps=pid', '--format=csv,noheader'],
@@ -202,7 +342,7 @@ class GPUMonitor:
                             processes = len([line for line in process_result.stdout.strip().split('\n') if line.strip()])
                         except:
                             processes = 0
-                        
+
                         return {
                             "available": True,
                             "method": "nvidia-smi",
@@ -215,6 +355,10 @@ class GPUMonitor:
                             "power_usage_w": power_usage,
                             "power_limit_w": power_limit,
                             "power_percent": round((power_usage / power_limit) * 100, 2) if power_limit > 0 else 0,
+                            "gpu_clock_mhz": graphics_clock_mhz,
+                            "memory_clock_base_mhz": memory_clock_base_mhz,
+                            "memory_clock_effective_mhz": memory_clock_effective_mhz,
+                            "fan_speed_percent": fan_speed_percent,
                             "process_count": processes
                         }
                 except Exception as e:
@@ -234,9 +378,9 @@ class GPUMonitor:
             import torch
             if not torch.cuda.is_available():
                 return self._get_stats_fallback()
-            
+
             device = torch.cuda.current_device()
-            
+
             return {
                 "available": True,
                 "method": "pytorch",
@@ -244,11 +388,15 @@ class GPUMonitor:
                 "memory_used_mb": torch.cuda.memory_allocated(device) // (1024 * 1024),
                 "memory_total_mb": torch.cuda.get_device_properties(device).total_memory // (1024 * 1024),
                 "memory_percent": round((torch.cuda.memory_allocated(device) / torch.cuda.get_device_properties(device).total_memory) * 100, 2),
-                "utilization_percent": None, 
-                "temperature_c": None,  
-                "power_usage_w": None,  
+                "utilization_percent": None,
+                "temperature_c": None,
+                "power_usage_w": None,
                 "power_limit_w": None,
                 "power_percent": None,
+                "gpu_clock_mhz": None,
+                "memory_clock_base_mhz": None,
+                "memory_clock_effective_mhz": None,
+                "fan_speed_percent": None,
                 "process_count": None
             }
         except Exception as e:
@@ -269,10 +417,14 @@ class GPUMonitor:
             "power_usage_w": None,
             "power_limit_w": None,
             "power_percent": None,
+            "gpu_clock_mhz": None,
+            "memory_clock_base_mhz": None,
+            "memory_clock_effective_mhz": None,
+            "fan_speed_percent": None,
             "process_count": None,
             "note": "Platform detection only - limited stats available"
         }
-    
+
     def _get_stats_fallback(self) -> Dict[str, Any]:
         """Fallback stats when detailed monitoring is not available"""
         return {
@@ -287,6 +439,10 @@ class GPUMonitor:
             "power_usage_w": None,
             "power_limit_w": None,
             "power_percent": None,
+            "gpu_clock_mhz": None,
+            "memory_clock_base_mhz": None,
+            "memory_clock_effective_mhz": None,
+            "fan_speed_percent": None,
             "process_count": None,
             "note": "GPU detected but detailed monitoring not available"
         }

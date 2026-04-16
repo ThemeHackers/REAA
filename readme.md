@@ -87,7 +87,13 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 
 **Installation:**
 ```bash
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
 # For GPU support, install PyTorch with CUDA
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
@@ -205,7 +211,13 @@ docker-compose build
 docker-compose up -d
 ```
 
-5. **Access WebUI**:
+5. **Run app.py**
+
+```
+python webui/app.py
+```
+
+6. **Access WebUI**:
 ```
 http://127.0.0.1:5000
 ```
@@ -221,7 +233,7 @@ API_BASE=http://localhost:11434/v1
 MODEL_NAME=llama3.2:3b
 OLLAMA_MAX_TOKENS=4096
 OLLAMA_TEMPERATURE=0.7
-LLM4DECOMPILE_MODEL_PATH=LLM4Binary/llm4decompile-6.7b-v2
+LLM4DECOMPILE_MODEL_PATH=LLM4Binary/llm4decompile-1.3b-v2
 LLM4DECOMPILE_DEVICE=auto
 LLM4DECOMPILE_DTYPE=float16
 LLM4DECOMPILE_MAX_MEMORY={0: "6GB"}

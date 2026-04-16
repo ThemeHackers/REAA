@@ -5,6 +5,8 @@ import requests
 import os
 import datetime
 import subprocess
+import signal
+import sys
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, Response
 from flask_socketio import SocketIO, emit
@@ -15,31 +17,23 @@ from model import model_manager
 from models import db, User
 from auth import auth_manager, token_required
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+refiner_available = True  
 
 load_dotenv()
 
 VALID_API_KEYS = set(os.getenv('VALID_API_KEYS', '').split(',')) if os.getenv('VALID_API_KEYS') else set()
 
 
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-try:
-    from core.llm_refiner import get_refiner
-    print("Pre-loading LLM refiner model...")
-    get_refiner()
-    print("LLM refiner model loaded successfully")
-except Exception as e:
-    print(f"Warning: Failed to pre-load LLM refiner: {e}")
-
 def generate_api_key():
-    """Generate a random API key"""
     import secrets
     import string
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(32))
 
 def validate_api_key(api_key):
-    """Validate if the provided API key is valid"""
     if not api_key:
         return False
     return api_key in VALID_API_KEYS
@@ -58,13 +52,52 @@ GHIDRA_API_BASE = "http://127.0.0.1:8000"
 r2_bridge = Radare2Bridge()
 r2_agent = Radare2AgentController(r2_bridge)
 
+
+try:
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from core.llm_refiner import get_refiner, initialize_refiner
+    print("[STARTUP] Pre-loading LLM refiner model...")
+    refiner_loaded = initialize_refiner()
+    if refiner_loaded:
+        print("[STARTUP] LLM refiner model loaded successfully")
+    else:
+        print("[STARTUP] LLM refiner model failed to load (will load on first use)")
+except Exception as e:
+    print(f"[STARTUP] Failed to pre-load LLM refiner: {e}")
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/pseudocode')
+def pseudocode():
+    return render_template('pseudocode.html')
+
+@app.route('/api/jobs/<job_id>/pseudocode/<filename>', methods=['GET'])
+def get_pseudocode_content(job_id, filename):
+    try:
+        import os
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
+        file_path = os.path.join(pseudocode_dir, filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({"error": "Pseudocode file not found"}), 404
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return jsonify({
+            "filename": filename,
+            "content": content
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/auth/register', methods=['POST'])
 def register():
-    """Register a new user"""
     try:
         data = request.get_json()
         username = data.get('username')
@@ -137,7 +170,6 @@ def login():
 @app.route('/api/auth/logout', methods=['POST'])
 @token_required
 def logout():
-    """Logout user and invalidate token"""
     try:
         auth_header = request.headers.get('Authorization', '')
         if not auth_header or ' ' not in auth_header:
@@ -160,7 +192,6 @@ def logout():
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
 def get_current_user():
-    """Get current user information"""
     try:
         user = User.query.get(request.current_user_id)
         if not user:
@@ -243,7 +274,6 @@ def get_chat_history(job_id):
 
 @app.route('/chat/history/<job_id>', methods=['DELETE'])
 def clear_chat_history(job_id):
-    """Clear chat history for a specific job"""
     try:
         success = assistant.clear_history(job_id)
         if success:
@@ -282,7 +312,6 @@ def security_report(job_id):
 
 @app.route('/security/history/<job_id>', methods=['DELETE'])
 def clear_security_history(job_id):
-    """Clear security analysis history for a specific job"""
     try:
         success = security_agent.clear_security_history(job_id)
         if success:
@@ -319,7 +348,6 @@ def security_scan():
 
 @app.route('/api/jobs', methods=['GET'])
 def api_list_jobs():
-    """Get all jobs with detailed information"""
     try:
         import os
         
@@ -458,8 +486,7 @@ def api_list_jobs():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs/<job_id>', methods=['DELETE'])
-def api_delete_job(job_id):
-    """Delete a specific job and its associated files"""
+def delete_job(job_id):
     try:
         ghidra_available = False
         try:
@@ -485,7 +512,6 @@ def api_delete_job(job_id):
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
 def api_get_job(job_id):
-    """Get detailed information about a specific job"""
     try:
         status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}")
         status_response.raise_for_status()
@@ -523,7 +549,6 @@ def api_get_job(job_id):
 
 @app.route('/api/jobs/<job_id>/download', methods=['GET'])
 def api_download_job_results(job_id):
-    """Download all results for a job as a zip file"""
     try:
         import zipfile
         import io
@@ -566,7 +591,6 @@ def api_download_job_results(job_id):
 
 @app.route('/api/system/status', methods=['GET'])
 def api_system_status():
-    """Check system status including Ghidra headless REST service availability"""
     try:
         try:
             response = requests.get(f"{GHIDRA_API_BASE}/jobs", timeout=3)
@@ -590,7 +614,6 @@ def api_system_status():
 
 @app.route('/api/docker/status', methods=['GET'])
 def api_docker_status():
-    """Check Docker container status"""
     try:
 
         result = subprocess.run(
@@ -661,7 +684,6 @@ def api_docker_status():
 
 @app.route('/api/docker/logs/<container_name>', methods=['GET'])
 def api_docker_logs(container_name):
-    """Get logs for a specific container"""
     try:
         lines = request.args.get('lines', 50, type=int)
         result = subprocess.run(
@@ -690,9 +712,21 @@ def api_docker_logs(container_name):
             'error': str(e)
         }), 500
 
+@app.route('/api/gpu/status', methods=['GET'])
+def api_gpu_status():
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from core.gpu_monitor import get_gpu_monitor
+        monitor = get_gpu_monitor()
+        gpu_stats = monitor.get_gpu_stats()
+        return jsonify(gpu_stats)
+    except Exception as e:
+        return jsonify({"error": str(e), "available": False}), 500
+
 @app.route('/gpu/status', methods=['GET'])
 def gpu_status():
-    """Get GPU monitoring information"""
     try:
         import sys
         import os
@@ -706,7 +740,6 @@ def gpu_status():
 
 @app.route('/gpu/detailed', methods=['GET'])
 def gpu_detailed():
-    """Get detailed GPU information"""
     try:
         import sys
         import os
@@ -720,7 +753,6 @@ def gpu_detailed():
 
 @app.route('/results/<job_id>/function/<addr>/refine', methods=['GET'])
 def get_refined(job_id, addr):
-    """Get LLM-refined code for a function"""
     try:
         import os
         data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
@@ -738,75 +770,88 @@ def get_refined(job_id, addr):
 
 @app.route('/api/jobs/<job_id>/refine/batch', methods=['POST'])
 def batch_refine(job_id):
-    """Batch refine all pseudocode files for a job (parallel processing, 5 files at a time)"""
     try:
         import os
         import sys
         import concurrent.futures
         from pathlib import Path
-        
+
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
         from core.llm_refiner import get_refiner
-        
+
+        print(f"[DEBUG] batch_refine called for job_id: {job_id}")
+
+        refiner = get_refiner()
+        print(f"[DEBUG] refiner: {refiner}, available: {refiner.is_available() if refiner else 'N/A'}")
+        if not refiner.is_available():
+            return jsonify({
+                "error": "LLM refiner not available. Please configure LLM4DECOMPILE_MODEL_PATH in .env file and ensure the model is downloaded."
+            }), 503
+
         data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
         pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
         refine_dir = os.path.join(data_dir, job_id, "artifacts", "refine")
-        
+
+        print(f"[DEBUG] data_dir: {data_dir}")
+        print(f"[DEBUG] pseudocode_dir: {pseudocode_dir}")
+        print(f"[DEBUG] pseudocode_dir exists: {os.path.exists(pseudocode_dir)}")
 
         os.makedirs(refine_dir, exist_ok=True)
-        
-       
+
+
         pseudocode_files = []
         if os.path.exists(pseudocode_dir):
             for f in os.listdir(pseudocode_dir):
                 if f.endswith('.c'):
                     addr = f.replace('.c', '')
                     refined_file = os.path.join(refine_dir, f)
-                  
+
                     if not os.path.exists(refined_file):
                         pseudocode_file = os.path.join(pseudocode_dir, f)
                         pseudocode_files.append((addr, pseudocode_file, refined_file))
-        
+
+        print(f"[DEBUG] Found {len(pseudocode_files)} pseudocode files to refine")
+
         if not pseudocode_files:
             return jsonify({
                 "message": "No files to refine (all pseudocode files already have refined versions)",
                 "total_files": 0,
                 "processed": 0
             })
-        
-     
-        refiner = get_refiner()
-        
+
         def refine_single(addr, pseudocode_file, refined_file):
-            """Refine a single file"""
             try:
                 with open(pseudocode_file, 'r', encoding='utf-8') as f:
                     pseudocode = f.read()
-                
+
                 refined_code = refiner.refine_pseudo_code(pseudocode)
-                
+
+                if refined_code is None:
+                    return {"addr": addr, "status": "error", "error": "Model returned empty result"}
+
                 with open(refined_file, 'w', encoding='utf-8') as f:
                     f.write(refined_code)
-                
+
                 return {"addr": addr, "status": "success"}
             except Exception as e:
                 return {"addr": addr, "status": "error", "error": str(e)}
         
-      
+
         results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             futures = {
                 executor.submit(refine_single, addr, pseudocode_file, refined_file): addr
                 for addr, pseudocode_file, refined_file in pseudocode_files
             }
-            
+
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 results.append(result)
-        
+
         success_count = sum(1 for r in results if r["status"] == "success")
         error_count = sum(1 for r in results if r["status"] == "error")
-        
+
         return jsonify({
             "message": f"Batch refinement completed",
             "total_files": len(pseudocode_files),
@@ -820,7 +865,6 @@ def batch_refine(job_id):
 
 @app.route('/api/jobs/<job_id>/pseudocode/files', methods=['GET'])
 def get_pseudocode_files(job_id):
-    """Get list of pseudocode files and refined files for a job"""
     try:
         import os
         from pathlib import Path
@@ -849,80 +893,141 @@ def get_pseudocode_files(job_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/jobs/<job_id>/refine/selective', methods=['POST'])
-def selective_refine(job_id):
-    """Refine specific pseudocode files for a job"""
+@app.route('/api/jobs/<job_id>/diff/<filename>', methods=['GET'])
+def get_file_diff(job_id, filename):
     try:
         import os
-        import sys
-        import concurrent.futures
-        from pathlib import Path
-        
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from core.llm_refiner import get_refiner
+        import difflib
         
         data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
         pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
         refine_dir = os.path.join(data_dir, job_id, "artifacts", "refine")
         
-        os.makedirs(refine_dir, exist_ok=True)
+        pseudocode_file = os.path.join(pseudocode_dir, filename)
+        refined_file = os.path.join(refine_dir, filename)
         
+        if not os.path.exists(pseudocode_file):
+            return jsonify({"error": "Pseudocode file not found"}), 404
+        
+        if not os.path.exists(refined_file):
+            return jsonify({"error": "Refined file not found"}), 404
+        
+        with open(pseudocode_file, 'r', encoding='utf-8') as f:
+            original = f.readlines()
+        
+        with open(refined_file, 'r', encoding='utf-8') as f:
+            refined = f.readlines()
+        
+        diff = list(difflib.unified_diff(original, refined, fromfile=f'pseudocode/{filename}', tofile=f'refine/{filename}', lineterm=''))
+        
+        return jsonify({
+            "filename": filename,
+            "diff": ''.join(diff),
+            "has_changes": len(diff) > 0
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/refine/selective', methods=['POST'])
+def selective_refine(job_id):
+    try:
+        import os
+        import sys
+        import concurrent.futures
+        from pathlib import Path
+
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+        from core.llm_refiner import get_refiner
+
+        print(f"[DEBUG] selective_refine called for job_id: {job_id}")
+
+        refiner = get_refiner()
+        print(f"[DEBUG] refiner: {refiner}, available: {refiner.is_available() if refiner else 'N/A'}")
+        if not refiner.is_available():
+            print(f"[DEBUG] Refiner not available, returning 503")
+            return jsonify({
+                "error": "LLM refiner not available. Please configure LLM4DECOMPILE_MODEL_PATH in .env file and ensure the model is downloaded."
+            }), 503
+
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
+        refine_dir = os.path.join(data_dir, job_id, "artifacts", "refine")
+
+        print(f"[DEBUG] data_dir: {data_dir}")
+        print(f"[DEBUG] pseudocode_dir: {pseudocode_dir}")
+        print(f"[DEBUG] pseudocode_dir exists: {os.path.exists(pseudocode_dir)}")
+
+        os.makedirs(refine_dir, exist_ok=True)
+
         request_data = request.get_json() or {}
         selected_files = request_data.get('files', [])
-        
+
+        print(f"[DEBUG] selected_files: {selected_files}")
+
         if not selected_files:
             return jsonify({"error": "No files specified for refinement"}), 400
-        
+
         pseudocode_files = []
         for filename in selected_files:
             if not filename.endswith('.c'):
                 filename = filename + '.c'
-            
+
             pseudocode_file = os.path.join(pseudocode_dir, filename)
             refined_file = os.path.join(refine_dir, filename)
-            
+
+            print(f"[DEBUG] Checking file: {pseudocode_file}, exists: {os.path.exists(pseudocode_file)}")
             if os.path.exists(pseudocode_file):
                 addr = filename.replace('.c', '')
                 pseudocode_files.append((addr, pseudocode_file, refined_file))
-        
+
+        print(f"[DEBUG] Found {len(pseudocode_files)} pseudocode files to refine")
+
         if not pseudocode_files:
             return jsonify({
                 "message": "No valid pseudocode files found for refinement",
                 "total_files": 0,
                 "processed": 0
             })
-        
-        refiner = get_refiner()
-        
+
         def refine_single(addr, pseudocode_file, refined_file):
-            """Refine a single file"""
             try:
+                print(f"[DEBUG] Refining {addr} from {pseudocode_file}")
                 with open(pseudocode_file, 'r', encoding='utf-8') as f:
                     pseudocode = f.read()
-                
+
+                print(f"[DEBUG] Calling refiner.refine_pseudo_code for {addr}")
                 refined_code = refiner.refine_pseudo_code(pseudocode)
-                
+                print(f"[DEBUG] Refinement completed for {addr}, got result: {refined_code is not None}")
+
+                if refined_code is None:
+                    print(f"[DEBUG] Refinement returned None for {addr}")
+                    return {"addr": addr, "status": "error", "error": "Model returned empty result"}
+
                 with open(refined_file, 'w', encoding='utf-8') as f:
                     f.write(refined_code)
-                
+
                 return {"addr": addr, "status": "success"}
             except Exception as e:
+                print(f"[DEBUG] Error refining {addr}: {e}")
+                import traceback
+                traceback.print_exc()
                 return {"addr": addr, "status": "error", "error": str(e)}
-        
+
         results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             futures = {
                 executor.submit(refine_single, addr, pseudocode_file, refined_file): addr
                 for addr, pseudocode_file, refined_file in pseudocode_files
             }
-            
+
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 results.append(result)
-        
+
         success_count = sum(1 for r in results if r["status"] == "success")
         error_count = sum(1 for r in results if r["status"] == "error")
-        
+
         return jsonify({
             "message": f"Selective refinement completed",
             "total_files": len(pseudocode_files),
@@ -936,7 +1041,6 @@ def selective_refine(job_id):
 
 @app.route('/api/jobs/cleanup', methods=['POST'])
 def api_cleanup_jobs():
-    """Clean up completed and failed jobs"""
     try:
         data = request.get_json() or {}
         older_than_days = data.get('older_than_days', 7)
@@ -982,7 +1086,6 @@ def api_cleanup_jobs():
         return jsonify({"error": str(e)}), 500
 
 def cleanup_job_data(job_id):
-    """Clean up local data associated with a job"""
     import os
     import glob
     import shutil
@@ -1040,7 +1143,6 @@ def cleanup_job_data(job_id):
 
 @app.route('/api/r2/status', methods=['GET'])
 def r2_status():
-    """Check if radare2 is available"""
     available = r2_bridge.check_r2_available()
     version = r2_bridge.get_version() if available else None
     return jsonify({
@@ -1050,7 +1152,6 @@ def r2_status():
 
 @app.route('/api/r2/analyze', methods=['POST'])
 def r2_analyze():
-    """Analyze a file using radare2"""
     data = request.get_json()
     file_path = data.get('file_path')
     
@@ -1062,7 +1163,6 @@ def r2_analyze():
 
 @app.route('/api/r2/command', methods=['POST'])
 def r2_execute_command():
-    """Execute a radare2 command"""
     data = request.get_json()
     command = data.get('command')
     job_id = data.get('job_id')
@@ -1101,7 +1201,6 @@ def r2_execute_command():
 
 @app.route('/api/r2/load', methods=['POST'])
 def r2_load_file():
-    """Load a file into radare2 for terminal use"""
     data = request.get_json()
     job_id = data.get('job_id')
     
@@ -1175,25 +1274,32 @@ def r2_load_file():
 
 @app.route('/api/r2/functions', methods=['GET'])
 def r2_get_functions():
-    """Get functions from current radare2 session"""
     functions = r2_bridge.get_functions()
     return jsonify({"functions": functions})
 
+@app.route('/api/jobs/<job_id>/functions', methods=['GET'])
+def get_job_functions(job_id):
+    try:
+        response = requests.get(f"{GHIDRA_API_BASE}/jobs/{job_id}/functions", timeout=5)
+        if response.ok:
+            return jsonify(response.json())
+        
+        return jsonify({"functions": []})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/r2/strings', methods=['GET'])
 def r2_get_strings():
-    """Get strings from current radare2 session"""
     strings = r2_bridge.get_strings()
     return jsonify({"strings": strings})
 
 @app.route('/api/r2/imports', methods=['GET'])
 def r2_get_imports():
-    """Get imports from current radare2 session"""
     imports = r2_bridge.get_imports()
     return jsonify({"imports": imports})
 
 @app.route('/api/r2/autonomous', methods=['POST'])
 def r2_autonomous_analyze():
-    """Execute autonomous analysis plan"""
     data = request.get_json()
     analysis_plan = data.get('plan', [])
     
@@ -1205,13 +1311,11 @@ def r2_autonomous_analyze():
 
 @app.route('/api/r2/summary', methods=['GET'])
 def r2_get_summary():
-    """Get analysis summary"""
     summary = r2_agent.get_analysis_summary()
     return jsonify(summary)
 
 @app.route('/api/r2/boundaries', methods=['GET', 'POST'])
 def r2_boundaries():
-    """Get or set autonomous operation boundaries"""
     if request.method == 'POST':
         data = request.get_json()
         r2_agent.set_boundaries(data)
@@ -1221,7 +1325,6 @@ def r2_boundaries():
 
 @app.route('/api/r2/asm/config', methods=['GET', 'POST'])
 def r2_asm_config():
-    """Get or set ASM formatting configuration"""
     if request.method == 'POST':
         data = request.get_json()
         r2_bridge.set_asm_config(data)
@@ -1231,7 +1334,6 @@ def r2_asm_config():
 
 @app.route('/api/r2/asm/preset', methods=['POST'])
 def r2_asm_preset():
-    """Apply a formatting preset"""
     data = request.get_json()
     preset = data.get('preset')
     
@@ -1252,7 +1354,6 @@ def r2_asm_preset():
 
 @app.route('/api/r2/disasm/function', methods=['POST'])
 def r2_disasm_function():
-    """Disassemble a function with enhanced formatting"""
     data = request.get_json()
     function_name = data.get('function_name')
     enhanced = data.get('enhanced', True)
@@ -1265,7 +1366,6 @@ def r2_disasm_function():
 
 @app.route('/api/r2/disasm/range', methods=['POST'])
 def r2_disasm_range():
-    """Disassemble a range of addresses"""
     data = request.get_json()
     start_addr = data.get('start_addr')
     end_addr = data.get('end_addr')
@@ -1279,7 +1379,6 @@ def r2_disasm_range():
 
 @app.route('/api/r2/disasm/graph', methods=['POST'])
 def r2_disasm_graph():
-    """Disassemble with graph view"""
     data = request.get_json()
     function_name = data.get('function_name')
     
@@ -1291,7 +1390,6 @@ def r2_disasm_graph():
 
 @app.route('/api/asm/analyze', methods=['POST'])
 def analyze_asm_code():
-    """Analyze selected ASM code using specialized ASM agent"""
     data = request.get_json()
     code = data.get('code')
     job_id = data.get('job_id')
@@ -1352,134 +1450,744 @@ Please provide a comprehensive analysis covering:
             "error": str(e)
         }), 500
 
+def transform_memory_data(data):
+    if not data or 'sections' not in data:
+        return data
+    
+    transformed_sections = []
+    total_size = 0
+    base_address = None
+    
+    for section in data['sections']:
+       
+        start_addr = int(section.get('start', '0x0'), 16)
+        end_addr = int(section.get('end', '0x0'), 16)
+        size = section.get('size', end_addr - start_addr)
+        
+       
+        if base_address is None or start_addr < base_address:
+            base_address = start_addr
+        
+        total_size += size
+        
+       
+        perms = section.get('permissions', {})
+        perm_str = ''
+        perm_str += 'R' if perms.get('read', False) else '-'
+        perm_str += 'W' if perms.get('write', False) else '-'
+        perm_str += 'X' if perms.get('execute', False) else '-'
+        
+        transformed_sections.append({
+            'name': section.get('name', 'unknown'),
+            'address': start_addr,
+            'size': size,
+            'permissions': perm_str,
+            'type': section.get('type', 'unknown')
+        })
+    
+    return {
+        'sections': transformed_sections,
+        'total_size': total_size,
+        'base_address': base_address,
+        'architecture': data.get('architecture', 'Unknown')
+    }
+
 @app.route('/api/jobs/<job_id>/memory', methods=['GET'])
 def get_memory_layout(job_id):
-    """Get memory layout for a job"""
+    print(f"[Memory Layout] Called for job_id: {job_id}")
     try:
+
         response = requests.get(f"{GHIDRA_API_BASE}/results/{job_id}/memory", timeout=5)
+        print(f"[Memory Layout] Ghidra API response status: {response.status_code}")
         if response.ok:
-            return jsonify(response.json())
+            data = response.json()
+            transformed = transform_memory_data(data)
+            print(f"[Memory Layout] Transformed data has sections: {bool(transformed and 'sections' in transformed and transformed['sections'])}")
+            if transformed and 'sections' in transformed and transformed['sections']:
+                print(f"[Memory Layout] Returning transformed data with {len(transformed['sections'])} sections")
+                return jsonify(transformed)
         
+       
+        print(f"[Memory Layout] Trying to read from memory_layout.json file")
+        import os
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+        memory_file = os.path.join(job_path, 'artifacts', 'memory_layout.json')
+        
+        if os.path.exists(memory_file):
+            print(f"[Memory Layout] Found memory_layout.json file")
+            with open(memory_file, 'r') as f:
+                memory_data = json.load(f)
+            transformed = transform_memory_data(memory_data)
+            if transformed and 'sections' in transformed and transformed['sections']:
+                print(f"[Memory Layout] Returning file data with {len(transformed['sections'])} sections")
+                return jsonify(transformed)
+        
+      
+        print(f"[Memory Layout] Returning fallback mock data")
         return jsonify({
-            "base_address": "0x400000",
+            "base_address": 0x400000,
             "total_size": 1048576,
+            "architecture": "Unknown",
             "sections": [
-                {"name": ".text", "address": "0x400000", "end_address": "0x401000", "size": 4096, "permissions": "r-x", "description": "Code segment"},
-                {"name": ".data", "address": "0x401000", "end_address": "0x402000", "size": 4096, "permissions": "rw-", "description": "Initialized data"},
-                {"name": ".bss", "address": "0x402000", "end_address": "0x403000", "size": 4096, "permissions": "rw-", "description": "Uninitialized data"}
+                {"name": ".text", "address": 0x400000, "size": 4096, "permissions": "r-x", "type": "code"},
+                {"name": ".data", "address": 0x401000, "size": 4096, "permissions": "rw-", "type": "data"},
+                {"name": ".bss", "address": 0x402000, "size": 4096, "permissions": "rw-", "type": "bss"}
             ]
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"[Memory Layout] Error in get_memory_layout: {e}")
+        
+        return jsonify({
+            "base_address": 0x400000,
+            "total_size": 1048576,
+            "architecture": "Unknown",
+            "sections": [
+                {"name": ".text", "address": 0x400000, "size": 4096, "permissions": "r-x", "type": "code"}
+            ]
+        })
 
-@app.route('/api/jobs/<job_id>/callgraph', methods=['GET'])
-def get_call_graph(job_id):
-    """Get call graph for a job"""
+@app.route('/api/jobs/<job_id>/memory/<section_name>/hex', methods=['GET'])
+def get_memory_hex_dump(job_id, section_name):
     try:
-        response = requests.get(f"{GHIDRA_API_BASE}/jobs/{job_id}/callgraph", timeout=5)
+        import os
+        
+        response = requests.get(f"{GHIDRA_API_BASE}/results/{job_id}/memory/{section_name}/hex", timeout=5)
         if response.ok:
             return jsonify(response.json())
         
-        return jsonify({
-            "nodes": [
-                {"id": "main", "label": "main", "address": "0x400500"},
-                {"id": "function1", "label": "function1", "address": "0x400600"},
-                {"id": "function2", "label": "function2", "address": "0x400700"},
-                {"id": "printf", "label": "printf", "address": "0x400800"}
-            ],
-            "edges": [
-                {"source": "main", "target": "function1"},
-                {"source": "main", "target": "function2"},
-                {"source": "function1", "target": "printf"},
-                {"source": "function2", "target": "printf"}
-            ]
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/jobs/<job_id>/controlflow/<function_address>', methods=['GET'])
-def get_control_flow(job_id, function_address):
-    """Get control flow graph for a function"""
-    try:
-        response = requests.get(f"{GHIDRA_API_BASE}/results/{job_id}/controlflow/{function_address}", timeout=5)
-        if response.ok:
-            return jsonify(response.json())
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+        memory_file = os.path.join(job_path, 'artifacts', 'memory_layout.json')
+        
+        if not os.path.exists(memory_file):
+            return jsonify({
+                "bytes": [],
+                "size": 0,
+                "section": section_name,
+                "error": "Memory layout file not found"
+            })
+        
+        with open(memory_file, 'r') as f:
+            memory_data = json.load(f)
+        
+        section = None
+        for sec in memory_data.get('sections', []):
+            if sec.get('name') == section_name:
+                section = sec
+                break
+        
+        if not section:
+            return jsonify({
+                "bytes": [],
+                "size": 0,
+                "section": section_name,
+                "error": "Section not found in memory layout"
+            })
+        
+        binary_file = None
+        for file in os.listdir(job_path):
+            if file.endswith('.exe') or file.endswith('.dll') or file.endswith('.bin'):
+                binary_file = os.path.join(job_path, file)
+                break
+        
+        if not binary_file or not os.path.exists(binary_file):
+            return jsonify({
+                "bytes": [],
+                "size": 0,
+                "section": section_name,
+                "error": "Binary file not found"
+            })
+        
+        start_addr = section.get('start', '0x0')
+        end_addr = section.get('end', '0x0')
+        size = section.get('size', 0)
+        
+        try:
+            start_offset = int(start_addr, 16)
+            end_offset = int(end_addr, 16)
+        except:
+            start_offset = 0
+            end_offset = size
+        
+        with open(binary_file, 'rb') as f:
+            f.seek(start_offset)
+            bytes_data = f.read(min(end_offset - start_offset, 16384))
+        
+        bytes_list = list(bytes_data)
         
         return jsonify({
-            "function_name": "main",
-            "function_address": function_address or "0x400500",
-            "blocks": [
-                {
-                    "id": "block1",
-                    "address": "0x400500",
-                    "instructions": ["push rbp", "mov rbp, rsp", "sub rsp, 0x10"],
-                    "edges": [{"target": "block2"}]
-                },
-                {
-                    "id": "block2",
-                    "address": "0x400510",
-                    "instructions": ["mov eax, 0", "ret"],
-                    "edges": []
-                }
-            ]
+            "bytes": bytes_list,
+            "size": len(bytes_list),
+            "section": section_name,
+            "source": "binary_file"
         })
+        
     except Exception as e:
+        import traceback
+        print(f"Error in get_memory_hex_dump: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/memory/analysis', methods=['GET'])
+def get_memory_analysis(job_id):
+    try:
+        import os
+        import math
+        
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+        memory_file = os.path.join(job_path, 'artifacts', 'memory_layout.json')
+        
+        if not os.path.exists(memory_file):
+            return jsonify({"error": "Memory layout file not found"}), 404
+        
+        with open(memory_file, 'r') as f:
+            memory_data = json.load(f)
+        
+        sections = memory_data.get('sections', [])
+        analysis = {
+            "total_sections": len(sections),
+            "total_size": 0,
+            "sections_by_type": {},
+            "sections_by_permission": {},
+            "entropy_analysis": [],
+            "address_ranges": []
+        }
+        
+        binary_file = None
+        for file in os.listdir(job_path):
+            if file.endswith('.exe') or file.endswith('.dll') or file.endswith('.bin'):
+                binary_file = os.path.join(job_path, file)
+                break
+        
+        for section in sections:
+            size = section.get('size', 0)
+            section_type = section.get('type', 'unknown')
+            permissions = section.get('permissions', '')
+            
+          
+            if isinstance(permissions, dict):
+                perm_str = ''
+                if permissions.get('read') or permissions.get('r'):
+                    perm_str += 'R'
+                if permissions.get('write') or permissions.get('w'):
+                    perm_str += 'W'
+                if permissions.get('execute') or permissions.get('x'):
+                    perm_str += 'X'
+                permissions = perm_str or '---'
+            
+            analysis['total_size'] += size
+            
+            analysis['sections_by_type'][section_type] = analysis['sections_by_type'].get(section_type, 0) + 1
+            
+            analysis['sections_by_permission'][permissions] = analysis['sections_by_permission'].get(permissions, 0) + 1
+            
+            if binary_file and size > 0:
+                try:
+                    start_addr = section.get('start', '0x0')
+                    end_addr = section.get('end', '0x0')
+                    start_offset = int(start_addr, 16)
+                    end_offset = int(end_addr, 16)
+                    
+                    with open(binary_file, 'rb') as f:
+                        f.seek(start_offset)
+                        bytes_data = f.read(min(end_offset - start_offset, 8192))
+                    
+                    if len(bytes_data) > 0:
+                        byte_counts = [0] * 256
+                        for byte in bytes_data:
+                            byte_counts[byte] += 1
+                        
+                        entropy = 0
+                        for count in byte_counts:
+                            if count > 0:
+                                probability = count / len(bytes_data)
+                                entropy -= probability * math.log2(probability)
+                        
+                        analysis['entropy_analysis'].append({
+                            "section": section.get('name'),
+                            "entropy": entropy,
+                            "size": len(bytes_data),
+                            "is_encrypted": entropy > 7.5
+                        })
+                except Exception as e:
+                    print(f"Error calculating entropy for section {section.get('name')}: {e}")
+            
+            analysis['address_ranges'].append({
+                "section": section.get('name'),
+                "start": section.get('start'),
+                "end": section.get('end'),
+                "size": size
+            })
+        
+        return jsonify(analysis)
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in get_memory_analysis: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/memory/strings', methods=['GET'])
+def get_memory_strings(job_id):
+    try:
+        import os
+        import re
+        
+        min_length = int(request.args.get('min_length', 4))
+        section_name = request.args.get('section', None)
+        
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+        memory_file = os.path.join(job_path, 'artifacts', 'memory_layout.json')
+        
+        if not os.path.exists(memory_file):
+            return jsonify({"error": "Memory layout file not found"}), 404
+        
+        with open(memory_file, 'r') as f:
+            memory_data = json.load(f)
+        
+        sections = memory_data.get('sections', [])
+        
+        if section_name:
+            sections = [s for s in sections if s.get('name') == section_name]
+        
+        binary_file = None
+        for file in os.listdir(job_path):
+            if file.endswith('.exe') or file.endswith('.dll') or file.endswith('.bin'):
+                binary_file = os.path.join(job_path, file)
+                break
+        
+        if not binary_file:
+            return jsonify({"error": "Binary file not found"}), 404
+        
+        strings = []
+        
+        for section in sections:
+            try:
+                start_addr = section.get('start', '0x0')
+                end_addr = section.get('end', '0x0')
+                start_offset = int(start_addr, 16)
+                end_offset = int(end_addr, 16)
+                
+                with open(binary_file, 'rb') as f:
+                    f.seek(start_offset)
+                    bytes_data = f.read(min(end_offset - start_offset, 1048576))
+                
+                current_string = []
+                current_offset = 0
+                
+                for byte in bytes_data:
+                    if 32 <= byte <= 126:
+                        current_string.append(chr(byte))
+                    else:
+                        if len(current_string) >= min_length:
+                            string_value = ''.join(current_string)
+                            strings.append({
+                                "address": hex(start_offset + current_offset - len(current_string)),
+                                "string": string_value,
+                                "length": len(current_string),
+                                "encoding": "ASCII",
+                                "section": section.get('name')
+                            })
+                        current_string = []
+                    current_offset += 1
+                
+                if len(current_string) >= min_length:
+                    string_value = ''.join(current_string)
+                    strings.append({
+                        "address": hex(start_offset + current_offset - len(current_string)),
+                        "string": string_value,
+                        "length": len(current_string),
+                        "encoding": "ASCII",
+                        "section": section.get('name')
+                    })
+                    
+            except Exception as e:
+                print(f"Error extracting strings from section {section.get('name')}: {e}")
+                continue
+        
+        return jsonify({
+            "strings": strings,
+            "count": len(strings),
+            "min_length": min_length
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in get_memory_strings: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/memory/<address>/xref', methods=['GET'])
+def get_memory_xref(job_id, address):
+    try:
+        xref_type = request.args.get('type', 'all')
+        
+        response = requests.post(f"{GHIDRA_API_BASE}/tools/get_xrefs", 
+                                json={"job_id": job_id, "addr": address}, 
+                                timeout=5)
+        
+        if response.ok:
+            try:
+                data = response.json()
+                return jsonify({
+                    "address": address,
+                    "calls_to": data.get("callers", []),
+                    "calls_from": data.get("callees", []),
+                    "data_refs": data.get("data_refs", []),
+                    "total_refs": len(data.get("callers", [])) + len(data.get("callees", [])) + len(data.get("data_refs", []))
+                })
+            except Exception as e:
+                print(f"Error parsing JSON from Ghidra API: {e}")
+                return jsonify({
+                    "address": address,
+                    "calls_to": [],
+                    "calls_from": [],
+                    "data_refs": [],
+                    "total_refs": 0,
+                    "error": "Failed to parse cross-reference data"
+                })
+        
+        return jsonify({
+            "address": address,
+            "calls_to": [],
+            "calls_from": [],
+            "data_refs": [],
+            "total_refs": 0,
+            "error": "No cross-reference data available"
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in get_memory_xref: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/memory/compare/<section1>/<section2>', methods=['GET'])
+def compare_memory_sections(job_id, section1, section2):
+    try:
+        import os
+        
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+        memory_file = os.path.join(job_path, 'artifacts', 'memory_layout.json')
+        
+        if not os.path.exists(memory_file):
+            return jsonify({"error": "Memory layout file not found"}), 404
+        
+        with open(memory_file, 'r') as f:
+            memory_data = json.load(f)
+        
+        sections = memory_data.get('sections', [])
+        
+        sec1 = next((s for s in sections if s.get('name') == section1), None)
+        sec2 = next((s for s in sections if s.get('name') == section2), None)
+        
+        if not sec1 or not sec2:
+            return jsonify({"error": "One or both sections not found"}), 404
+        
+        binary_file = None
+        for file in os.listdir(job_path):
+            if file.endswith('.exe') or file.endswith('.dll') or file.endswith('.bin'):
+                binary_file = os.path.join(job_path, file)
+                break
+        
+        if not binary_file:
+            return jsonify({"error": "Binary file not found"}), 404
+        
+        MAX_SECTION_SIZE = 10485760
+        
+        def read_section_bytes(section):
+            start_addr = section.get('start', '0x0')
+            end_addr = section.get('end', '0x0')
+            start_offset = int(start_addr, 16)
+            end_offset = int(end_addr, 16)
+            section_size = end_offset - start_offset
+            
+            if section_size > MAX_SECTION_SIZE:
+                raise ValueError(f"Section too large: {section_size} bytes (max {MAX_SECTION_SIZE})")
+            
+            with open(binary_file, 'rb') as f:
+                f.seek(start_offset)
+                return f.read(section_size)
+        
+        bytes1 = read_section_bytes(sec1)
+        bytes2 = read_section_bytes(sec2)
+        
+        min_length = min(len(bytes1), len(bytes2))
+        max_length = max(len(bytes1), len(bytes2))
+        
+        matching_bytes = 0
+        different_bytes = []
+        
+        for i in range(min_length):
+            if bytes1[i] == bytes2[i]:
+                matching_bytes += 1
+            else:
+                different_bytes.append({
+                    "offset": i,
+                    "section1_byte": hex(bytes1[i]),
+                    "section2_byte": hex(bytes2[i])
+                })
+        
+        similarity = (matching_bytes / max_length * 100) if max_length > 0 else 0
+        
+        return jsonify({
+            "section1": {
+                "name": section1,
+                "size": len(bytes1),
+                "start": sec1.get('start'),
+                "end": sec1.get('end')
+            },
+            "section2": {
+                "name": section2,
+                "size": len(bytes2),
+                "start": sec2.get('start'),
+                "end": sec2.get('end')
+            },
+            "comparison": {
+                "total_bytes_compared": min_length,
+                "matching_bytes": matching_bytes,
+                "different_bytes": len(different_bytes),
+                "similarity_percentage": round(similarity, 2),
+                "differences": different_bytes[:100]  
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in compare_memory_sections: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/memory/pattern/search', methods=['POST'])
+def search_memory_pattern(job_id):
+    try:
+        import os
+        import re
+        
+        data = request.get_json()
+        pattern = data.get('pattern', '')
+        pattern_type = data.get('pattern_type', 'hex')
+        section_name = data.get('section', None)
+        
+        if not pattern:
+            return jsonify({"error": "Pattern is required"}), 400
+        
+        if not isinstance(pattern, str):
+            return jsonify({"error": "Pattern must be a string"}), 400
+        
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+        memory_file = os.path.join(job_path, 'artifacts', 'memory_layout.json')
+        
+        if not os.path.exists(memory_file):
+            return jsonify({"error": "Memory layout file not found"}), 404
+        
+        with open(memory_file, 'r') as f:
+            memory_data = json.load(f)
+        
+        sections = memory_data.get('sections', [])
+        
+        if section_name:
+            sections = [s for s in sections if s.get('name') == section_name]
+        
+        binary_file = None
+        for file in os.listdir(job_path):
+            if file.endswith('.exe') or file.endswith('.dll') or file.endswith('.bin'):
+                binary_file = os.path.join(job_path, file)
+                break
+        
+        if not binary_file:
+            return jsonify({"error": "Binary file not found"}), 404
+        
+        results = []
+        
+        if pattern_type == 'hex':
+            try:
+                pattern_bytes = bytes.fromhex(pattern.replace(' ', ''))
+            except ValueError:
+                return jsonify({"error": "Invalid hex pattern"}), 400
+        elif pattern_type == 'regex':
+            try:
+                regex_pattern = re.compile(pattern.encode('utf-8'))
+            except Exception:
+                return jsonify({"error": "Invalid regex pattern"}), 400
+            pattern_bytes = None
+        elif pattern_type == 'wildcard':
+            try:
+                wildcard_pattern = pattern.replace(' ', '').replace('??', '.')
+                regex_pattern = re.compile(wildcard_pattern.encode('utf-8'))
+            except Exception:
+                return jsonify({"error": "Invalid wildcard pattern"}), 400
+            pattern_bytes = None
+        else:
+            return jsonify({"error": "Invalid pattern type"}), 400
+        
+        MAX_SECTION_SIZE = 10485760
+        
+        for section in sections:
+            try:
+                start_addr = section.get('start', '0x0')
+                end_addr = section.get('end', '0x0')
+                start_offset = int(start_addr, 16)
+                end_offset = int(end_addr, 16)
+                section_size = end_offset - start_offset
+                
+                if section_size > MAX_SECTION_SIZE:
+                    print(f"Skipping section {section.get('name')}: too large ({section_size} bytes)")
+                    continue
+                
+                with open(binary_file, 'rb') as f:
+                    f.seek(start_offset)
+                    bytes_data = f.read(section_size)
+                
+                if pattern_type == 'hex' and pattern_bytes:
+                    pattern_len = len(pattern_bytes)
+                    for i in range(len(bytes_data) - pattern_len + 1):
+                        if bytes_data[i:i+pattern_len] == pattern_bytes:
+                            results.append({
+                                "section": section.get('name'),
+                                "address": hex(start_offset + i),
+                                "matched_bytes": [hex(b) for b in bytes_data[i:i+pattern_len]],
+                                "context": [hex(b) for b in bytes_data[max(0, i-4):i+pattern_len+4]]
+                            })
+                elif pattern_type in ['regex', 'wildcard']:
+                    for match in regex_pattern.finditer(bytes_data):
+                        matched_bytes = match.group()
+                        results.append({
+                            "section": section.get('name'),
+                            "address": hex(start_offset + match.start()),
+                            "matched_bytes": [hex(b) for b in matched_bytes],
+                            "context": [hex(b) for b in bytes_data[max(0, match.start()-4):match.end()+4]]
+                        })
+                
+            except Exception as e:
+                print(f"Error searching section {section.get('name')}: {e}")
+                continue
+        
+        return jsonify({
+            "pattern": pattern,
+            "pattern_type": pattern_type,
+            "matches": results,
+            "count": len(results)
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in search_memory_pattern: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/remote/health', methods=['GET'])
 def remote_health():
-    """Health check endpoint for remote connections"""
     return jsonify({
         "status": "healthy",
         "version": "1.0.0",
         "collaboration_enabled": True
     })
 
-@app.route('/api/remote/jobs', methods=['GET'])
-def get_remote_jobs():
-    """Get list of jobs available for remote collaboration"""
+@app.route('/api/remote/server/status', methods=['GET'])
+def remote_server_status():
     try:
-        jobs = get_available_jobs()
-        return jsonify({"jobs": jobs})
+        ghidra_online = False
+        try:
+            response = requests.get(f"{GHIDRA_API_BASE}/jobs", timeout=2)
+            if response.ok:
+                ghidra_online = True
+        except:
+            pass
+        
+        return jsonify({
+            "status": "online",
+            "ghidra_online": ghidra_online,
+            "collaboration_enabled": True,
+            "version": "1.0.0"
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/remote/server/status', methods=['GET'])
-def remote_server_status():
-    """Get server mode status for remote collaboration"""
+@app.route('/api/remote/jobs', methods=['GET'])
+def get_remote_jobs():
     try:
-        total_clients = sum(len(users) for users in room_users.values())
-        active_rooms = len([room for room in room_users.keys() if len(room_users[room]) > 0])
-        
-        return jsonify({
-            "server_mode": True,
-            "total_connected_clients": total_clients,
-            "active_rooms": active_rooms,
-            "room_details": {
-                room_id: {
-                    "connected_users": len(users),
-                    "users": [{"id": uid, "username": data.get('username', 'Anonymous')} 
-                             for uid, data in users.items()]
-                }
-                for room_id, users in room_users.items()
-            }
-        })
+        import os
+        import json
+        jobs = []
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+
+        if os.path.exists(data_dir):
+            for job_id in os.listdir(data_dir):
+                job_path = os.path.join(data_dir, job_id)
+                if os.path.isdir(job_path):
+
+                    local_filename = None
+                    local_status = None
+
+                   
+                    try:
+                        for file in os.listdir(job_path):
+                            if file.endswith('.exe') or file.endswith('.sys') or file.endswith('.dll') or file.endswith('.bin'):
+                                local_filename = file
+                                break
+                    except Exception as e:
+                        print(f"Error scanning directory {job_id}: {e}")
+
+                    if not local_filename:
+                        status_file = os.path.join(job_path, 'status.json')
+                        if os.path.exists(status_file):
+                            try:
+                                with open(status_file, 'r') as f:
+                                    status_data = json.load(f)
+                                    local_filename = status_data.get('filename')
+                                    local_status = status_data.get('status')
+                            except Exception as e:
+                                print(f"Error reading status.json for {job_id}: {e}")
+
+                    try:
+                        status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}", timeout=2)
+                        if status_response.ok:
+                            status_data = status_response.json()
+                            status = status_data.get('status', local_status or 'done')
+                            filename = status_data.get('filename', local_filename or job_id)
+                        else:
+                            status = local_status or 'done'
+                            filename = local_filename or job_id
+                    except:
+                        status = local_status or 'done'
+                        filename = local_filename or job_id
+
+                    jobs.append({
+                        "job_id": job_id,
+                        "filename": filename,
+                        "status": status,
+                        "connected_users": len(room_users.get(job_id, []))
+                    })
+
+        return jsonify({"jobs": jobs})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/remote/room/<job_id>/users', methods=['GET'])
 def get_room_users(job_id):
-    """Get users in a specific collaboration room"""
     try:
         if job_id not in room_users:
             return jsonify({"users": []})
-        return jsonify({"users": list(room_users[job_id])})
+        users_list = [
+            {
+                'user_id': uid,
+                'username': udata.get('username', 'Anonymous'),
+                'joined_at': udata.get('joined_at')
+            }
+            for uid, udata in room_users[job_id].items()
+        ]
+        return jsonify({"users": users_list})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/remote/api-keys', methods=['GET'])
 def get_api_keys():
-    """Get list of valid API keys (for server admin)"""
     return jsonify({
         "api_keys": list(VALID_API_KEYS),
         "count": len(VALID_API_KEYS)
@@ -1487,7 +2195,6 @@ def get_api_keys():
 
 @app.route('/api/remote/api-keys', methods=['POST'])
 def create_api_key():
-    """Generate a new API key (for server admin)"""
     new_key = generate_api_key()
     VALID_API_KEYS.add(new_key)
     return jsonify({
@@ -1497,7 +2204,6 @@ def create_api_key():
 
 @app.route('/api/remote/api-keys/<key>', methods=['DELETE'])
 def delete_api_key(key):
-    """Delete/revoke an API key (for server admin)"""
     if key in VALID_API_KEYS:
         VALID_API_KEYS.remove(key)
         return jsonify({"message": "API key revoked successfully"})
@@ -1534,6 +2240,20 @@ def handle_disconnect():
                     'job_id': room_id,
                     'available_jobs': get_available_jobs()
                 }, room=room_id)
+
+             
+                users_list = [
+                    {
+                        'user_id': uid,
+                        'username': udata.get('username', 'Anonymous'),
+                        'joined_at': udata.get('joined_at')
+                    }
+                    for uid, udata in room_users[room_id].items()
+                ]
+                emit('room_users', {
+                    'job_id': room_id,
+                    'users': users_list
+                }, room=room_id)
                 break
     
     if request.sid in connected_clients:
@@ -1541,7 +2261,6 @@ def handle_disconnect():
 
 @socketio.on('collaboration_auth')
 def handle_collaboration_auth(data):
-    """Handle authentication for collaboration"""
     print(f'[Remote] Auth request: username={data.get("username")}, mode={data.get("mode")}')
     username = data.get('username', 'Anonymous')
     api_key = data.get('api_key')
@@ -1573,15 +2292,15 @@ def handle_collaboration_auth(data):
             'active_rooms': len([r for r in room_users.keys() if len(room_users[r]) > 0])
         }
     })
-    return True
-    
+
     emit('job_list', {
         'jobs': get_available_jobs()
     })
 
+    return True
+
 @socketio.on('join_room')
 def handle_join_room(data):
-    """Handle user joining a collaboration room"""
     print(f'[Remote] Join room request: job_id={data.get("job_id")}, user_id={data.get("user_id")}')
     job_id = data.get('job_id')
     user_id = data.get('user_id', request.sid)
@@ -1599,18 +2318,21 @@ def handle_join_room(data):
     if request.sid in connected_clients:
         username = connected_clients[request.sid].get('username', username)
     
+    user_already_in_room = user_id in room_users.get(job_id, {})
+    
     room_users[job_id][user_id] = {
         'username': username,
         'joined_at': datetime.datetime.now().isoformat()
     }
     
-    print(f'[Remote] Emitting user_joined to room {job_id}')
-    emit('user_joined', {
-        'user_id': user_id,
-        'username': username,
-        'job_id': job_id,
-        'available_jobs': get_available_jobs()
-    }, room=job_id, include_self=False)
+    if not user_already_in_room:
+        print(f'[Remote] Emitting user_joined to room {job_id}')
+        emit('user_joined', {
+            'user_id': user_id,
+            'username': username,
+            'job_id': job_id,
+            'available_jobs': get_available_jobs()
+        }, room=job_id, include_self=False)
     
     users_list = [
         {
@@ -1630,33 +2352,45 @@ def handle_join_room(data):
 
 @socketio.on('leave_room')
 def handle_leave_room(data):
-    """Handle user leaving a collaboration room"""
     print(f'[Remote] Leave room request: job_id={data.get("job_id")}, user_id={data.get("user_id")}')
     job_id = data.get('job_id')
     user_id = data.get('user_id', request.sid)
-    
+
     if not job_id:
         return
-    
+
     from flask_socketio import leave_room
     leave_room(job_id)
-    
+
     if job_id in room_users and user_id in room_users[job_id]:
         username = room_users[job_id][user_id].get('username', 'Anonymous')
         del room_users[job_id][user_id]
-        
+
         emit('user_left', {
             'user_id': user_id,
             'username': username,
             'job_id': job_id,
             'available_jobs': get_available_jobs()
         }, room=job_id)
-    
+
+       
+        users_list = [
+            {
+                'user_id': uid,
+                'username': udata.get('username', 'Anonymous'),
+                'joined_at': udata.get('joined_at')
+            }
+            for uid, udata in room_users[job_id].items()
+        ]
+        emit('room_users', {
+            'job_id': job_id,
+            'users': users_list
+        }, room=job_id)
+
     print(f"User {user_id} left room {job_id}")
 
 @socketio.on('request_server_status')
 def handle_server_status_request():
-    """Handle request for server status (for server mode)"""
     total_clients = len(connected_clients)
     active_rooms = len([r for r in room_users.keys() if len(room_users[r]) > 0])
     
@@ -1682,7 +2416,7 @@ def handle_request_jobs():
 
 @socketio.on('chat_message')
 def handle_chat_message(data):
-    """Handle chat messages in collaboration room"""
+    
     job_id = data.get('job_id')
     message = data.get('message')
     user_id = data.get('user_id', request.sid)
@@ -1703,7 +2437,7 @@ def handle_chat_message(data):
 
 @socketio.on('job_update')
 def handle_job_update(data):
-    """Handle job updates from collaboration"""
+    
     job_id = data.get('job_id')
     update_type = data.get('update_type')
     update_data = data.get('data')
@@ -1720,7 +2454,7 @@ def handle_job_update(data):
 
 @socketio.on('cursor_update')
 def handle_cursor_update(data):
-    """Handle real-time cursor position updates"""
+   
     job_id = data.get('job_id')
     cursor_type = data.get('type')
     cursor_data = data.get('data')
@@ -1742,114 +2476,67 @@ def handle_cursor_update(data):
     }, room=job_id, include_self=False)
 
 def get_available_jobs():
-    """Helper function to get available jobs for remote collaboration"""
     try:
+        import json
         jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
         if not os.path.exists(jobs_dir):
             return []
-        
+
         jobs = []
         for job_id in os.listdir(jobs_dir):
             job_path = os.path.join(jobs_dir, job_id)
             if os.path.isdir(job_path):
-                status_file = os.path.join(job_path, 'status.json')
-                if os.path.exists(status_file):
-                    with open(status_file, 'r') as f:
-                        status_data = json.load(f)
-                        jobs.append({
-                            "job_id": job_id,
-                            "filename": status_data.get('filename', 'Unknown'),
-                            "status": status_data.get('status', 'unknown'),
-                            "created_at": status_data.get('created_at', 0),
-                            "connected_users": len(room_users.get(job_id, {}))
-                        })
+                local_filename = None
+                local_status = None
+
+         
+                try:
+                    for file in os.listdir(job_path):
+                        if file.endswith('.exe') or file.endswith('.sys') or file.endswith('.dll') or file.endswith('.bin'):
+                            local_filename = file
+                            break
+                except Exception as e:
+                    print(f"Error scanning directory {job_id}: {e}")
+
+              
+                if not local_filename:
+                    status_file = os.path.join(job_path, 'status.json')
+                    if os.path.exists(status_file):
+                        try:
+                            with open(status_file, 'r') as f:
+                                status_data = json.load(f)
+                                local_filename = status_data.get('filename')
+                                local_status = status_data.get('status')
+                        except Exception as e:
+                            print(f"Error reading status.json for {job_id}: {e}")
+
+                try:
+                    status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}", timeout=2)
+                    if status_response.ok:
+                        status_data = status_response.json()
+                        status = status_data.get('status', local_status or 'done')
+                        filename = status_data.get('filename', local_filename or job_id)
+                    else:
+                        status = local_status or 'done'
+                        filename = local_filename or job_id
+                except:
+                    status = local_status or 'done'
+                    filename = local_filename or job_id
+
+                jobs.append({
+                    "job_id": job_id,
+                    "filename": filename,
+                    "status": status,
+                    "connected_users": len(room_users.get(job_id, []))
+                })
         return jobs
     except Exception as e:
         print(f"Error getting available jobs: {e}")
         return []
 
-@app.route('/api/timeline/<job_id>', methods=['GET'])
-def get_timeline(job_id):
-    """Get analysis timeline for a job"""
-    try:
-        import time
-        current_time = int(time.time() * 1000)
-        
-        
-        response = requests.get(f"{GHIDRA_API_BASE}/timeline/{job_id}", timeout=5)
-        if response.ok:
-            return jsonify(response.json())
-       
-        return jsonify({
-            "events": [
-                {
-                    "id": "event_1",
-                    "type": "analysis_started",
-                    "title": "Binary Analysis Started",
-                    "description": "Initial analysis of binary file",
-                    "timestamp": current_time - 300000,
-                    "duration": 5000,
-                    "status": "completed",
-                    "category": "analysis",
-                    "dependencies": [],
-                    "metadata": {"job_id": job_id}
-                },
-                {
-                    "id": "event_2",
-                    "type": "function_discovery",
-                    "title": "Function Discovery",
-                    "description": "Discovered functions in binary",
-                    "timestamp": current_time - 290000,
-                    "duration": 10000,
-                    "status": "completed",
-                    "category": "analysis",
-                    "dependencies": ["event_1"],
-                    "metadata": {"functions_found": 150}
-                },
-                {
-                    "id": "event_3",
-                    "type": "decompilation",
-                    "title": "Function Decompilation",
-                    "description": "Decompiled main functions",
-                    "timestamp": current_time - 280000,
-                    "duration": 15000,
-                    "status": "completed",
-                    "category": "analysis",
-                    "dependencies": ["event_2"],
-                    "metadata": {"functions_decompiled": 50}
-                },
-                {
-                    "id": "event_4",
-                    "type": "security_analysis",
-                    "title": "Security Analysis",
-                    "description": "Analyzed security vulnerabilities",
-                    "timestamp": current_time - 265000,
-                    "duration": 20000,
-                    "status": "completed",
-                    "category": "security",
-                    "dependencies": ["event_3"],
-                    "metadata": {"vulnerabilities_found": 3}
-                },
-                {
-                    "id": "event_5",
-                    "type": "report_generation",
-                    "title": "Report Generation",
-                    "description": "Generated analysis report",
-                    "timestamp": current_time - 245000,
-                    "duration": 5000,
-                    "status": "completed",
-                    "category": "analysis",
-                    "dependencies": ["event_4"],
-                    "metadata": {}
-                }
-            ]
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/jobs/<job_id>/strings', methods=['GET'])
 def get_strings(job_id):
-    """Get strings for a job"""
+   
     try:
         response = requests.get(f"{GHIDRA_API_BASE}/jobs/{job_id}/strings", timeout=5)
         if response.ok:
@@ -1879,7 +2566,7 @@ def get_strings(job_id):
 
 @app.route('/api/jobs/<job_id>/imports', methods=['GET'])
 def get_imports(job_id):
-    """Get import/export data for a job"""
+  
     try:
         response = requests.get(f"{GHIDRA_API_BASE}/results/{job_id}/imports", timeout=5)
         if response.ok:
@@ -1912,7 +2599,7 @@ def get_imports(job_id):
 
 @app.route('/api/settings', methods=['POST'])
 def save_settings():
-    """Save user settings"""
+    
     try:
         data = request.get_json()
         r2_path = data.get('r2_path')
@@ -1944,7 +2631,7 @@ def save_settings():
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
-    """Get current model and system status"""
+   
     try:
         return jsonify({
             "current_model": model_manager.get_current_model(),
@@ -1955,7 +2642,7 @@ def get_models():
 
 @app.route('/api/models/current', methods=['GET'])
 def get_current_model():
-    """Get current active model"""
+    
     try:
         return jsonify({
             "model": model_manager.get_current_model(),
@@ -1966,7 +2653,7 @@ def get_current_model():
 
 @app.route('/api/models/switch', methods=['POST'])
 def switch_model():
-    """Switch to a different model"""
+  
     try:
         data = request.get_json()
         model_name = data.get('model_name')
@@ -1988,7 +2675,7 @@ def switch_model():
 
 @app.route('/api/models/test', methods=['POST'])
 def test_model():
-    """Test connection to the model API"""
+    
     try:
         result = model_manager.test_model_connection()
         return jsonify(result)
@@ -1997,7 +2684,7 @@ def test_model():
 
 @app.route('/api/models/config', methods=['POST'])
 def update_model_config():
-    """Update model API configuration"""
+   
     try:
         data = request.get_json()
         api_base = data.get('api_base')
@@ -2019,7 +2706,7 @@ def update_model_config():
 
 @app.route('/api/graph/<job_id>', methods=['GET'])
 def get_graph_data(job_id):
-    """Get call graph data for a job"""
+  
     try:
         
         response = requests.get(f"{GHIDRA_API_BASE}/graph/{job_id}", timeout=5)
@@ -2049,7 +2736,7 @@ def get_graph_data(job_id):
 
 @app.route('/api/r2/test', methods=['POST'])
 def test_r2_path():
-    """Test if radare2 is available at given path"""
+   
     try:
         data = request.get_json()
         print(f"Request data: {data}")
@@ -2117,7 +2804,59 @@ def handle_job_status_request(data):
 def handle_heartbeat(sid):
     emit('heartbeat_response', {'timestamp': datetime.datetime.now().isoformat()})
 
+def signal_handler(sig, frame):
+   
+    print("\n\nReceived interrupt signal. Force closing all connections...")
+    try:
+      
+        for sid in list(connected_clients.keys()):
+            try:
+                socketio.disconnect(sid)
+            except:
+                pass
+        
+       
+        for room_id in list(room_users.keys()):
+            try:
+                socketio.close_room(room_id)
+            except:
+                pass
+        
+        print("All connections force closed. Exiting...")
+    except Exception as e:
+        print(f"Error during force shutdown: {e}")
+    finally:
+        sys.exit(0)
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    socketio.run(app, debug=True, port=5000)
+    try:
+        print("Starting server...")
+        print("Model is loaded and ready.")
+        
+       
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        with app.app_context():
+            try:
+                db.create_all()
+            except Exception as e:
+                print(f"Warning: Failed to create database tables: {e}")
+                print("Continuing without database initialization...")
+        
+        socketio.run(app, debug=False, port=5000)
+    except KeyboardInterrupt:
+        print("\n\nServer shutdown requested by user")
+        signal_handler(signal.SIGINT, None)
+    except (OSError, PermissionError) as e:
+        print(f"\n\nSystem error: {e}")
+        print("Please check file permissions and try again")
+        sys.exit(1)
+    except ImportError as e:
+        print(f"\n\nImport error: {e}")
+        print("Please check that all required dependencies are installed")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n\nUnexpected error during startup: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

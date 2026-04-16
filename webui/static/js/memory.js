@@ -1,346 +1,971 @@
 $(document).ready(function() {
     let currentJobId = null;
     let memoryData = null;
+    let hexViewerState = {
+        currentSection: null,
+        offset: 0,
+        bytesPerLine: 16,
+        searchPattern: null,
+        virtualScroll: {
+            visibleLines: 30,
+            lineHeight: 20,
+            scrollTop: 0,
+            totalLines: 0
+        }
+    };
+    
+    function escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return unsafe;
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+    
+    function sanitizeData(obj) {
+        if (!obj || typeof obj !== 'object') return obj;
+        
+        if (Array.isArray(obj)) {
+            return obj.map(item => sanitizeData(item));
+        }
+        
+        const sanitized = {};
+        for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+                if (typeof obj[key] === 'string') {
+                    sanitized[key] = escapeHtml(obj[key]);
+                } else if (typeof obj[key] === 'object') {
+                    sanitized[key] = sanitizeData(obj[key]);
+                } else {
+                    sanitized[key] = obj[key];
+                }
+            }
+        }
+        return sanitized;
+    }
+    
     function initMemoryLayout(jobId) {
         currentJobId = jobId;
-        $.get(`/api/jobs/${jobId}/memory`, function(data) {
-            memoryData = data;
-            renderMemoryLayout(data);
-        }).fail(function(xhr) {
-            console.error('Failed to load memory layout:', xhr);
-            $('#memory-container').html('<div class="text-center text-gray-500 py-8">Failed to load memory layout data</div>');
+        console.log('[Memory] Loading memory layout for job:', jobId);
+        
+        $('#memory-container').html('<div class="text-center text-gray-400 py-8"><div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div><p>Loading memory layout...</p></div>');
+        
+        fetchWithRetry(`/api/jobs/${jobId}/memory`, 3, 1000)
+            .then(data => {
+                console.log('[Memory] Memory data received:', data);
+                
+                if (!data || typeof data !== 'object') {
+                    renderError('Invalid data format received');
+                    return;
+                }
+                
+                if (!data.sections || !Array.isArray(data.sections)) {
+                    renderError('No sections found in data');
+                    return;
+                }
+                
+                if (data.sections.length === 0) {
+                    renderError('No memory blocks available');
+                    return;
+                }
+                
+                memoryData = sanitizeData(data);
+                renderMemoryLayout(memoryData);
+            })
+            .catch(error => {
+                console.error('[Memory] Failed to load memory layout after retries:', error);
+                renderError('Failed to load memory layout. Please try again.');
+            });
+    }
+    
+    function fetchWithRetry(url, maxRetries = 3, initialDelay = 1000) {
+        return new Promise((resolve, reject) => {
+            let retries = 0;
+            let delay = initialDelay;
+            
+            function attemptFetch() {
+                $.get(url)
+                    .done(function(data) {
+                        resolve(data);
+                    })
+                    .fail(function(xhr) {
+                        retries++;
+                        if (retries < maxRetries) {
+                            console.log(`[Memory] Retry ${retries}/${maxRetries} in ${delay}ms`);
+                            setTimeout(attemptFetch, delay);
+                            delay *= 2; 
+                        } else {
+                            reject(xhr);
+                        }
+                    });
+            }
+            
+            attemptFetch();
         });
     }
+    
+    let hexSearchWorker = null;
+    function initHexSearchWorker() {
+        if (hexSearchWorker) return;
+        
+        try {
+            const workerBlob = new Blob([`
+                ${document.querySelector('script[src*="hex-search-worker.js"]') ? 
+                    '' : `
+                self.onmessage = function(e) {
+                    const { type, data } = e.data;
+                    
+                    if (type === 'search') {
+                        performHexSearch(data);
+                    }
+                };
+                
+                function performHexSearch({ bytes, pattern, searchType }) {
+                    const results = [];
+                    const startTime = performance.now();
+                    
+                    if (!bytes || !pattern) {
+                        self.postMessage({ type: 'searchResult', results: [], duration: 0 });
+                        return;
+                    }
+                    
+                    if (searchType === 'hex') {
+                        const patternBytes = parseHexPattern(pattern);
+                        if (patternBytes.length === 0) {
+                            self.postMessage({ type: 'searchResult', results: [], duration: performance.now() - startTime });
+                            return;
+                        }
+                        
+                        for (let i = 0; i <= bytes.length - patternBytes.length; i++) {
+                            let match = true;
+                            for (let j = 0; j < patternBytes.length; j++) {
+                                if (bytes[i + j] !== patternBytes[j]) {
+                                    match = false;
+                                    break;
+                                }
+                            }
+                            if (match) {
+                                results.push(i);
+                            }
+                        }
+                    } else if (searchType === 'ascii') {
+                        const patternBytes = pattern.split('').map(c => c.charCodeAt(0));
+                        for (let i = 0; i <= bytes.length - patternBytes.length; i++) {
+                            let match = true;
+                            for (let j = 0; j < patternBytes.length; j++) {
+                                if (bytes[i + j] !== patternBytes[j]) {
+                                    match = false;
+                                    break;
+                                }
+                            }
+                            if (match) {
+                                results.push(i);
+                            }
+                        }
+                    }
+                    
+                    const duration = performance.now() - startTime;
+                    self.postMessage({ type: 'searchResult', results, duration });
+                }
+                
+                function parseHexPattern(pattern) {
+                    const cleaned = pattern.replace(/\s+/g, '');
+                    const bytes = [];
+                    
+                    for (let i = 0; i < cleaned.length; i += 2) {
+                        if (i + 1 < cleaned.length) {
+                            const byte = parseInt(cleaned.substr(i, 2), 16);
+                            if (!isNaN(byte)) {
+                                bytes.push(byte);
+                            }
+                        }
+                    }
+                    
+                    return bytes;
+                }
+                `}
+            `], { type: 'application/javascript' });
+            
+            hexSearchWorker = new Worker(URL.createObjectURL(workerBlob));
+            
+            hexSearchWorker.onmessage = function(e) {
+                const { type, results, duration, message } = e.data;
+                
+                if (type === 'searchResult') {
+                    if (hexViewerState.searchCallback) {
+                        hexViewerState.searchCallback(results, duration);
+                    }
+                } else if (type === 'error') {
+                    console.error('[Memory] Hex search worker error:', message);
+                    showToast(message, 'error');
+                }
+            };
+            
+            console.log('[Memory] Hex search worker initialized');
+        } catch (e) {
+            console.error('[Memory] Failed to initialize hex search worker:', e);
+        }
+    }
+    
+    function performHexSearchWithWorker(pattern, searchType) {
+        if (!hexSearchWorker) {
+            initHexSearchWorker();
+        }
+        
+        if (!hexSearchWorker) {
+
+            performHexSearchMainThread(pattern, searchType);
+            return;
+        }
+        
+        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
+            const bytes = hexData.bytes || [];
+            
+            hexViewerState.searchCallback = function(results, duration) {
+                console.log(`[Memory] Hex search completed in ${duration.toFixed(2)}ms, found ${results.length} matches`);
+                
+                hexViewerState.searchResults = results;
+                hexViewerState.searchIndex = 0;
+                
+                if (results.length > 0) {
+                    $('#hex-search-results').text(`Found ${results.length} matches (${duration.toFixed(2)}ms). Use Next/Prev to navigate.`);
+                    hexViewerState.offset = results[0];
+                    loadHexDump(hexViewerState.currentSection, results[0], pattern, results);
+                } else {
+                    $('#hex-search-results').text('No matches found');
+                    loadHexDump(hexViewerState.currentSection, 0, null, []);
+                }
+            };
+            
+            hexSearchWorker.postMessage({
+                type: 'search',
+                data: { bytes, pattern, searchType }
+            });
+        }).fail(function() {
+            showToast('Failed to load hex data for search', 'error');
+        });
+    }
+    
+    function performHexSearchMainThread(pattern, searchType) {
+        console.log('[Memory] Using main thread for hex search (fallback)');
+        
+        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
+            const bytes = hexData.bytes || [];
+            const results = [];
+            const startTime = performance.now();
+            
+            if (searchType === 'hex') {
+                const patternBytes = parseHexPattern(pattern);
+                for (let i = 0; i <= bytes.length - patternBytes.length; i++) {
+                    let match = true;
+                    for (let j = 0; j < patternBytes.length; j++) {
+                        if (bytes[i + j] !== patternBytes[j]) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        results.push(i);
+                    }
+                }
+            } else if (searchType === 'ascii') {
+                const patternBytes = pattern.split('').map(c => c.charCodeAt(0));
+                for (let i = 0; i <= bytes.length - patternBytes.length; i++) {
+                    let match = true;
+                    for (let j = 0; j < patternBytes.length; j++) {
+                        if (bytes[i + j] !== patternBytes[j]) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        results.push(i);
+                    }
+                }
+            }
+            
+            const duration = performance.now() - startTime;
+            console.log(`[Memory] Hex search completed in ${duration.toFixed(2)}ms (main thread), found ${results.length} matches`);
+            
+            hexViewerState.searchResults = results;
+            hexViewerState.searchIndex = 0;
+            
+            if (results.length > 0) {
+                $('#hex-search-results').text(`Found ${results.length} matches (${duration.toFixed(2)}ms). Use Next/Prev to navigate.`);
+                hexViewerState.offset = results[0];
+                loadHexDump(hexViewerState.currentSection, results[0], pattern, results);
+            } else {
+                $('#hex-search-results').text('No matches found');
+            }
+        });
+    }
+    
+    function parseHexPattern(pattern) {
+        const cleaned = pattern.replace(/\s+/g, '').toUpperCase();
+        const bytes = [];
+        
+        if (cleaned.length === 0) return bytes;
+        
+        for (let i = 0; i < cleaned.length; i += 2) {
+            const hexPair = cleaned.substr(i, 2);
+            
+            if (hexPair.length === 1) {
+                const byte = parseInt(hexPair, 16);
+                if (!isNaN(byte)) {
+                    bytes.push(byte);
+                }
+            } else {
+                if (!/^[0-9A-F]{2}$/.test(hexPair)) {
+                    console.warn(`Invalid hex pattern: ${hexPair} at position ${i}`);
+                    continue;
+                }
+                const byte = parseInt(hexPair, 16);
+                if (!isNaN(byte)) {
+                    bytes.push(byte);
+                }
+            }
+        }
+        
+        return bytes;
+    }
+    
+    function renderError(message) {
+        $('#memory-container').html(`
+            <div class="text-center text-red-400 py-8">
+                <div class="text-4xl mb-3">⚠️</div>
+                <p class="text-lg mb-2">${message}</p>
+                <p class="text-sm text-gray-500">Please try refreshing the page or check the job data</p>
+            </div>
+        `);
+    }
+    
     function renderMemoryLayout(data) {
+        console.time('[Memory] renderMemoryLayout');
         const container = $('#memory-container');
         container.empty();
 
-        if (!data || !data.sections || data.sections.length === 0) {
-            container.html('<div class="text-center text-gray-500 py-8">No memory layout data available</div>');
+        const validSections = data.sections.filter(section => {
+            if (!section) return false;
+            if (typeof section.size !== 'number' || section.size < 0) return false;
+            if (!section.address && section.address !== 0) return false;
+            return true;
+        });
+        
+        if (validSections.length === 0) {
+            renderError('No valid memory blocks found');
+            console.timeEnd('[Memory] renderMemoryLayout');
             return;
         }
+        
+        const totalSize = data.total_size || validSections.reduce((sum, s) => sum + s.size, 0);
+        const baseAddress = data.base_address || (validSections.length > 0 ? validSections[0].address : 0);
+        
         const summaryHtml = `
-            <div class="memory-summary mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <h4 class="text-sm font-semibold text-gray-300 mb-3">Memory Summary</h4>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-green-400">${formatSize(data.total_size)}</div>
+            <div class="memory-summary mb-6 p-6 bg-gray-800 rounded-lg border border-gray-700">
+                <h4 class="text-sm font-semibold text-gray-300 mb-4">Memory Summary</h4>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
+                    <div class="text-center p-4">
+                        <div class="text-2xl font-bold text-green-400">${formatSize(totalSize)}</div>
                         <div class="text-xs text-gray-400">Total Size</div>
                     </div>
-                    <div class="text-center">
+                    <div class="text-center p-4">
                         <div class="text-2xl font-bold text-blue-400">${data.sections.length}</div>
-                        <div class="text-xs text-gray-400">Sections</div>
+                        <div class="text-xs text-gray-400">Memory Blocks</div>
                     </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-purple-400">${data.base_address ? '0x' + data.base_address.toString(16).toUpperCase() : 'N/A'}</div>
+                    <div class="text-center p-4">
+                        <div class="text-2xl font-bold text-purple-400">0x${baseAddress.toString(16).toUpperCase()}</div>
                         <div class="text-xs text-gray-400">Base Address</div>
                     </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-yellow-400">${data.architecture || 'Unknown'}</div>
-                        <div class="text-xs text-gray-400">Architecture</div>
-                    </div>
                 </div>
             </div>
         `;
-        const codeSize = data.sections.filter(s => getSectionType(s.name) === 'code').reduce((sum, s) => sum + s.size, 0);
-        const dataSize = data.sections.filter(s => getSectionType(s.name) === 'data').reduce((sum, s) => sum + s.size, 0);
-        const bssSize = data.sections.filter(s => getSectionType(s.name) === 'bss').reduce((sum, s) => sum + s.size, 0);
-        const rodataSize = data.sections.filter(s => getSectionType(s.name) === 'rodata').reduce((sum, s) => sum + s.size, 0);
-        const totalSize = data.total_size || 1;
         
-        const statsHtml = `
-            <div class="memory-stats mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <h4 class="text-sm font-semibold text-gray-300 mb-3">Memory Usage Statistics</h4>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="text-center">
-                        <div class="text-xl font-bold text-green-400">${formatSize(codeSize)}</div>
-                        <div class="text-xs text-gray-400">Code (${((codeSize / totalSize) * 100).toFixed(1)}%)</div>
-                        <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
-                            <div class="bg-green-500 h-2 rounded-full" style="width: ${((codeSize / totalSize) * 100).toFixed(1)}%"></div>
-                        </div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-xl font-bold text-blue-400">${formatSize(dataSize)}</div>
-                        <div class="text-xs text-gray-400">Data (${((dataSize / totalSize) * 100).toFixed(1)}%)</div>
-                        <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
-                            <div class="bg-blue-500 h-2 rounded-full" style="width: ${((dataSize / totalSize) * 100).toFixed(1)}%"></div>
-                        </div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-xl font-bold text-yellow-400">${formatSize(bssSize)}</div>
-                        <div class="text-xs text-gray-400">BSS (${((bssSize / totalSize) * 100).toFixed(1)}%)</div>
-                        <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
-                            <div class="bg-yellow-500 h-2 rounded-full" style="width: ${((bssSize / totalSize) * 100).toFixed(1)}%"></div>
-                        </div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-xl font-bold text-purple-400">${formatSize(rodataSize)}</div>
-                        <div class="text-xs text-gray-400">Read-Only (${((rodataSize / totalSize) * 100).toFixed(1)}%)</div>
-                        <div class="w-full bg-gray-700 rounded-full h-2 mt-1">
-                            <div class="bg-purple-500 h-2 rounded-full" style="width: ${((rodataSize / totalSize) * 100).toFixed(1)}%"></div>
-                        </div>
-                    </div>
+        const sectionsHtml = `
+            <div class="memory-sections mb-6">
+                <h4 class="text-sm font-semibold text-gray-300 mb-3">Memory Blocks</h4>
+                <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                    <table class="w-full text-xs">
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-gray-300">Block Name</th>
+                                <th class="px-4 py-2 text-left text-gray-300">Start Address</th>
+                                <th class="px-4 py-2 text-left text-gray-300">End Address</th>
+                                <th class="px-4 py-2 text-right text-gray-300">Size</th>
+                                <th class="px-4 py-2 text-center text-gray-300">Type</th>
+                                <th class="px-4 py-2 text-center text-gray-300">Permissions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700">
+                            ${data.sections.map((section, index) => {
+                                const percentage = ((section.size / totalSize) * 100).toFixed(2);
+                                const startAddr = section.start || '0x' + section.address.toString(16);
+                                const endAddr = section.end || '0x' + (section.address + section.size).toString(16);
+                                
+                            
+                                let permBadges = '';
+                                if (typeof section.permissions === 'string') {
+                                    if (section.permissions.includes('R') || section.permissions.includes('r')) {
+                                        permBadges += '<span class="px-2 py-1 bg-green-600 text-white rounded text-xs font-bold">R</span> ';
+                                    }
+                                    if (section.permissions.includes('W') || section.permissions.includes('w')) {
+                                        permBadges += '<span class="px-2 py-1 bg-red-600 text-white rounded text-xs font-bold">W</span> ';
+                                    }
+                                    if (section.permissions.includes('X') || section.permissions.includes('x')) {
+                                        permBadges += '<span class="px-2 py-1 bg-blue-600 text-white rounded text-xs font-bold">X</span> ';
+                                    }
+                                } else {
+                                    const perms = section.permissions || { read: false, write: false, execute: false };
+                                    if (perms.read || perms.read === true) {
+                                        permBadges += '<span class="px-2 py-1 bg-green-600 text-white rounded text-xs font-bold">R</span> ';
+                                    }
+                                    if (perms.write || perms.write === true) {
+                                        permBadges += '<span class="px-2 py-1 bg-red-600 text-white rounded text-xs font-bold">W</span> ';
+                                    }
+                                    if (perms.execute || perms.execute === true) {
+                                        permBadges += '<span class="px-2 py-1 bg-blue-600 text-white rounded text-xs font-bold">X</span> ';
+                                    }
+                                }
+                                
+                                return `
+                                    <tr class="hover:bg-gray-700/50 cursor-pointer memory-section-row" data-section="${section.name}">
+                                        <td class="px-4 py-3 text-gray-300 font-mono">${escapeHtml(section.name)}</td>
+                                        <td class="px-4 py-3 text-gray-300 font-mono">${escapeHtml(startAddr)}</td>
+                                        <td class="px-4 py-3 text-gray-300 font-mono">${escapeHtml(endAddr)}</td>
+                                        <td class="px-4 py-3 text-right text-gray-300">${formatSize(section.size)} (${percentage}%)</td>
+                                        <td class="px-4 py-3 text-center text-gray-300 capitalize">${escapeHtml((section.type && section.type !== 'unknown') ? section.type : guessSectionTypeFromData(section))}</td>
+                                        <td class="px-4 py-3 text-center">${permBadges || '<span class="text-gray-500">---</span>'}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         `;
-        const sectionsHtml = data.sections.map((section, index) => {
-            const sectionType = getSectionType(section.name);
-            const colorClass = getSectionColor(sectionType);
-            const percentage = ((section.size / totalSize) * 100).toFixed(1);
-            const permissions = getPermissionBadges(section.permissions);
-
-            return `
-                <div class="memory-section mb-4 p-4 bg-gray-800 rounded-lg border border-gray-700 hover:border-gray-600 transition cursor-pointer" data-section="${section.name}">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center gap-2">
-                            <div class="w-3 h-3 rounded-full ${colorClass}"></div>
-                            <span class="text-sm font-medium text-gray-300">${section.name}</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            ${permissions}
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4 text-xs">
-                        <div>
-                            <div class="text-gray-500">Address</div>
-                            <div class="font-mono text-gray-300">0x${section.address.toString(16).toUpperCase()}</div>
-                        </div>
-                        <div>
-                            <div class="text-gray-500">Size</div>
-                            <div class="text-gray-300">${formatSize(section.size)} (${percentage}%)</div>
-                        </div>
-                        <div>
-                            <div class="text-gray-500">Type</div>
-                            <div class="text-gray-300 capitalize">${sectionType}</div>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <div class="w-full bg-gray-700 rounded-full h-2">
-                            <div class="${colorClass} h-2 rounded-full" style="width: ${percentage}%"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        const memoryMapHtml = `
-            <div class="memory-map mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <div class="flex items-center justify-between mb-3">
-                    <h4 class="text-sm font-semibold text-gray-300">Memory Address Space</h4>
-                    <div class="flex gap-2">
-                        <button id="zoom-in" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs">+</button>
-                        <button id="zoom-out" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs">-</button>
-                        <button id="reset-zoom" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs">Reset</button>
-                    </div>
-                </div>
-                <div class="memory-map-visual relative h-16 bg-gray-900 rounded-lg overflow-hidden" id="memory-map-container">
-                    ${data.sections.map((section, index) => {
-                        const offset = data.base_address ? ((section.address - data.base_address) / totalSize) * 100 : 0;
+        
+        const visualMapHtml = `
+            <div class="memory-visual-map mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
+                <h4 class="text-sm font-semibold text-gray-300 mb-3">Memory Layout Visualization</h4>
+                <div class="relative h-8 bg-gray-900 rounded overflow-hidden">
+                    ${validSections.map((section, index) => {
+                        const offset = baseAddress ? ((section.address - baseAddress) / totalSize) * 100 : 0;
                         const width = Math.max(0.5, (section.size / totalSize) * 100);
-                        const colorClass = getSectionColor(getSectionType(section.name));
-                        const permissionIndicator = getPermissionIndicator(section.permissions);
+                        const colorClass = index % 2 === 0 ? 'bg-blue-600' : 'bg-green-600';
                         
                         return `
-                            <div class="memory-map-section absolute ${colorClass} ${permissionIndicator} hover:opacity-100 transition cursor-pointer border border-gray-600"
+                            <div class="absolute ${colorClass} hover:opacity-80 transition cursor-pointer border-r border-gray-900"
                                  style="left: ${offset}%; width: ${width}%; height: 100%;"
-                                 title="${section.name}: ${formatSize(section.size)} @ 0x${section.address.toString(16).toUpperCase()} (${section.permissions || 'N/A'})"
+                                 title="${section.name}: ${formatSize(section.size)} @ ${section.start}"
                                  data-section="${section.name}">
                             </div>
                         `;
                     }).join('')}
                 </div>
                 <div class="flex justify-between text-xs text-gray-500 mt-2 font-mono">
-                    <span>${data.base_address ? '0x' + data.base_address.toString(16).toUpperCase() : 'N/A'}</span>
-                    <span>${data.base_address ? '0x' + (data.base_address + data.total_size).toString(16).toUpperCase() : 'N/A'}</span>
+                    <span>0x${baseAddress.toString(16).toUpperCase()}</span>
+                    <span>0x${(baseAddress + totalSize).toString(16).toUpperCase()}</span>
                 </div>
             </div>
         `;
-        const stackHeapHtml = `
-            <div class="stack-heap mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <h4 class="text-sm font-semibold text-gray-300 mb-3">Stack & Heap Visualization</h4>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <h5 class="text-xs font-medium text-red-400 mb-2">Stack Region</h5>
-                        <div class="bg-gray-900 rounded-lg p-3 h-32 relative">
-                            <div class="absolute inset-0 flex flex-col justify-end">
-                                <div class="bg-red-600 bg-opacity-30 border border-red-500 rounded-t p-2 text-xs text-gray-300">
-                                    <div class="font-mono">High Addresses</div>
-                                    <div class="text-gray-400">Return addresses, local variables</div>
-                                </div>
-                                <div class="flex-1 bg-gradient-to-b from-red-600/20 to-transparent"></div>
-                                <div class="bg-red-600 bg-opacity-30 border border-red-500 rounded-b p-2 text-xs text-gray-300">
-                                    <div class="font-mono">Stack Pointer (SP)</div>
-                                    <div class="text-gray-400">Current stack frame</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <h5 class="text-xs font-medium text-orange-400 mb-2">Heap Region</h5>
-                        <div class="bg-gray-900 rounded-lg p-3 h-32 relative">
-                            <div class="absolute inset-0 flex flex-col">
-                                <div class="bg-orange-600 bg-opacity-30 border border-orange-500 rounded p-2 text-xs text-gray-300 mb-2">
-                                    <div class="font-mono">Heap Start</div>
-                                    <div class="text-gray-400">Dynamic allocations</div>
-                                </div>
-                                <div class="flex-1 bg-gradient-to-b from-orange-600/20 to-orange-600/10 rounded border border-orange-500/30 p-2">
-                                    <div class="text-xs text-gray-400 mb-1">Allocated blocks:</div>
-                                    <div class="space-y-1">
-                                        <div class="bg-orange-600 bg-opacity-40 rounded h-2"></div>
-                                        <div class="bg-orange-600 bg-opacity-60 rounded h-3"></div>
-                                        <div class="bg-orange-600 bg-opacity-30 rounded h-2"></div>
-                                        <div class="bg-orange-600 bg-opacity-50 rounded h-4"></div>
-                                    </div>
-                                </div>
-                                <div class="bg-orange-600 bg-opacity-30 border border-orange-500 rounded p-2 text-xs text-gray-300 mt-2">
-                                    <div class="font-mono">Heap End</div>
-                                    <div class="text-gray-400">Free space</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
+        
         const hexViewerHtml = `
             <div class="hex-viewer mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
                 <div class="flex items-center justify-between mb-3">
                     <h4 class="text-sm font-semibold text-gray-300">Hex Dump Viewer</h4>
                     <div class="flex gap-2">
-                        <input type="text" id="hex-address" placeholder="Address (hex)" 
-                               class="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-200 text-xs w-32 focus:outline-none focus:border-blue-500">
-                        <button id="hex-goto" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs">Go</button>
-                        <button id="hex-search" class="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs">Search Pattern</button>
-                        <button id="hex-save-snapshot" class="px-2 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs">Save Snapshot</button>
+                        <button id="hex-search-btn" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs">Search</button>
+                        <button id="hex-export" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs">Export</button>
                     </div>
                 </div>
+                
+                <!-- Search Panel -->
                 <div id="hex-search-panel" class="hidden mb-3 p-3 bg-gray-900 rounded border border-gray-700">
-                    <div class="flex gap-2 items-center">
-                        <input type="text" id="hex-pattern" placeholder="Byte pattern (e.g., 48 65 6c 6c 6f) or regex" 
-                               class="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-200 text-xs focus:outline-none focus:border-blue-500">
-                        <select id="hex-search-type" class="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-200 text-xs">
-                            <option value="hex">Hex Bytes</option>
-                            <option value="regex">Regex</option>
+                    <div class="flex gap-2 mb-2">
+                        <select id="hex-search-type" class="px-2 py-1 bg-gray-800 text-gray-300 rounded text-xs border border-gray-600">
+                            <option value="hex">Hex</option>
                             <option value="ascii">ASCII</option>
                         </select>
-                        <button id="hex-search-btn" class="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs">Search</button>
-                        <button id="hex-search-close" class="px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded text-xs">✕</button>
+                        <input type="text" id="hex-search-input" placeholder="Search pattern..." class="flex-1 px-2 py-1 bg-gray-800 text-gray-300 rounded text-xs border border-gray-600 focus:outline-none focus:border-blue-500">
+                        <button id="hex-search-execute" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs">Go</button>
+                        <button id="hex-search-close" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs">×</button>
                     </div>
-                    <div id="hex-search-results" class="mt-2 text-xs text-gray-400"></div>
+                    <div id="hex-search-results" class="text-xs text-gray-400"></div>
+                    <div class="flex gap-2 mt-2">
+                        <button id="hex-search-prev" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs">← Prev</button>
+                        <button id="hex-search-next" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs">Next →</button>
+                    </div>
                 </div>
-                <div id="hex-content" class="bg-gray-900 rounded p-3 font-mono text-xs text-gray-300 overflow-x-auto max-h-64 overflow-y-auto">
+                
+                <div id="hex-content" class="bg-gray-900 rounded p-3 font-mono text-xs text-gray-300 overflow-x-auto max-h-[600px] overflow-y-auto">
                     <div class="text-gray-500 text-center py-4">Select a section to view hex dump</div>
-                </div>
-                <div class="flex justify-between mt-2">
-                    <button id="hex-prev" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs">Previous</button>
-                    <span id="hex-offset" class="text-xs text-gray-400">Offset: 0x0</span>
-                    <button id="hex-next" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs">Next</button>
-                </div>
-            </div>
-        `;
-
-        const diffViewHtml = `
-            <div class="memory-diff-view mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <div class="flex items-center justify-between mb-3">
-                    <h4 class="text-sm font-semibold text-gray-300">Memory Diff View</h4>
-                    <div class="flex gap-2">
-                        <select id="diff-snapshot-1" class="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-200 text-xs">
-                            <option value="">Select Snapshot 1</option>
-                        </select>
-                        <select id="diff-snapshot-2" class="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-gray-200 text-xs">
-                            <option value="">Select Snapshot 2</option>
-                        </select>
-                        <button id="diff-compare" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs">Compare</button>
-                        <button id="diff-clear" class="px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded text-xs">Clear</button>
-                    </div>
-                </div>
-                <div id="diff-content" class="bg-gray-900 rounded p-3 font-mono text-xs max-h-64 overflow-y-auto">
-                    <div class="text-gray-500 text-center py-4">Select two snapshots to compare</div>
-                </div>
-            </div>
-        `;
-
-        const annotationHtml = `
-            <div class="memory-annotation mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <div class="flex items-center justify-between mb-3">
-                    <h4 class="text-sm font-semibold text-gray-300">Region Annotations</h4>
-                    <button id="annotation-add" class="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs">Add Annotation</button>
-                </div>
-                <div id="annotation-list" class="space-y-2 max-h-48 overflow-y-auto">
-                    <div class="text-gray-500 text-center py-2 text-xs">No annotations</div>
-                </div>
-            </div>
-        `;
-
-        const heatMapHtml = `
-            <div class="memory-heatmap mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <div class="flex items-center justify-between mb-3">
-                    <h4 class="text-sm font-semibold text-gray-300">Access Heat Map</h4>
-                    <div class="flex gap-2 items-center">
-                        <label class="text-xs text-gray-400">Simulate Access:</label>
-                        <button id="heatmap-simulate" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs">Simulate</button>
-                        <button id="heatmap-clear" class="px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded text-xs">Clear</button>
-                    </div>
-                </div>
-                <div id="heatmap-legend" class="flex gap-2 mb-2 text-xs">
-                    <span class="flex items-center gap-1"><div class="w-3 h-3 bg-green-500"></div> Low</span>
-                    <span class="flex items-center gap-1"><div class="w-3 h-3 bg-yellow-500"></div> Medium</span>
-                    <span class="flex items-center gap-1"><div class="w-3 h-3 bg-red-500"></div> High</span>
-                </div>
-                <div id="heatmap-content" class="bg-gray-900 rounded p-3 h-32 overflow-hidden">
-                    <div class="text-gray-500 text-center py-4 text-xs">Click "Simulate" to generate heat map</div>
-                </div>
-            </div>
-        `;
-
-        const legendHtml = `
-            <div class="memory-legend mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <h4 class="text-sm font-semibold text-gray-300 mb-3">Section Types</h4>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    ${[
-                        { type: 'code', color: 'bg-green-500', label: 'Code (.text)' },
-                        { type: 'data', color: 'bg-blue-500', label: 'Data (.data)' },
-                        { type: 'bss', color: 'bg-yellow-500', label: 'BSS (.bss)' },
-                        { type: 'rodata', color: 'bg-purple-500', label: 'Read-Only (.rodata)' },
-                        { type: 'stack', color: 'bg-red-500', label: 'Stack' },
-                        { type: 'heap', color: 'bg-orange-500', label: 'Heap' },
-                        { type: 'import', color: 'bg-pink-500', label: 'Import (.idata)' },
-                        { type: 'export', color: 'bg-cyan-500', label: 'Export (.edata)' }
-                    ].map(item => `
-                        <div class="flex items-center gap-2">
-                            <div class="w-3 h-3 rounded-full ${item.color}"></div>
-                            <span class="text-xs text-gray-400">${item.label}</span>
-                        </div>
-                    `).join('')}
                 </div>
             </div>
         `;
 
         container.html(`
             ${summaryHtml}
-            ${statsHtml}
-            <div class="memory-sections">
-                ${sectionsHtml}
-            </div>
-            ${memoryMapHtml}
-            ${stackHeapHtml}
+            ${visualMapHtml}
+            ${sectionsHtml}
             ${hexViewerHtml}
-            ${diffViewHtml}
-            ${annotationHtml}
-            ${heatMapHtml}
-            ${legendHtml}
         `);
-        $('.memory-section').on('click', function() {
+        
+        console.timeEnd('[Memory] renderMemoryLayout');
+        updateSidebarStatistics(data);
+        
+        $('.memory-section-row').on('click', function() {
             const sectionName = $(this).data('section');
-            showSectionDetails(sectionName);
+            console.log('[Memory] Clicked section:', sectionName);
+            
+            try {
+                showSectionDetailsInSidebar(sectionName);
+                loadHexDump(sectionName, 0, null, null);
+            } catch (error) {
+                console.error('[Memory] Error in click handler:', error);
+            }
         });
-        $('.memory-map-section').on('click', function() {
-            const sectionName = $(this).data('section');
-            showSectionDetails(sectionName);
+        
+        $('#ml-search').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            filterSections(searchTerm);
         });
-        $('#zoom-in').on('click', () => adjustMemoryMapZoom(1.2));
-        $('#zoom-out').on('click', () => adjustMemoryMapZoom(0.8));
-        $('#reset-zoom').on('click', () => resetMemoryMapZoom());
-        setupHexViewerHandlers();
+        
+        $('#hex-export').on('click', function() {
+            if (hexViewerState.currentSection) {
+                exportHexDump(hexViewerState.currentSection);
+            } else {
+                showToast('Please select a section first', 'warning');
+            }
+        });
+        
+        $('#hex-search-btn').on('click', function() {
+            $('#hex-search-panel').toggleClass('hidden');
+        });
+        
+        $('#hex-search-close').on('click', function() {
+            $('#hex-search-panel').addClass('hidden');
+        });
+        
+       
+        $('#hex-search-execute').on('click', function() {
+            const pattern = $('#hex-search-input').val();
+            const searchType = $('#hex-search-type').val();
+            
+            if (!pattern) {
+                showToast('Please enter a search pattern', 'warning');
+                return;
+            }
+            
+            if (!hexViewerState.currentSection) {
+                showToast('Please select a section first', 'warning');
+                return;
+            }
+            
+            hexViewerState.searchPattern = pattern;
+            $('#hex-search-results').text('Searching...');
+            
+            if (!hexSearchWorker) {
+                initHexSearchWorker();
+            }
+            
+            if (hexSearchWorker) {
+                performHexSearchWithWorker(pattern, searchType);
+            } else {
+                performHexSearchMainThread(pattern, searchType);
+            }
+        });
+        
+        $('#hex-search-prev').on('click', function() {
+            if (hexViewerState.searchResults && hexViewerState.searchResults.length > 0) {
+                hexViewerState.searchIndex--;
+                if (hexViewerState.searchIndex < 0) {
+                    hexViewerState.searchIndex = hexViewerState.searchResults.length - 1;
+                }
+                hexViewerState.offset = hexViewerState.searchResults[hexViewerState.searchIndex];
+                loadHexDump(hexViewerState.currentSection, hexViewerState.offset, hexViewerState.searchPattern, hexViewerState.searchResults);
+                $('#hex-search-results').text(`Match ${hexViewerState.searchIndex + 1} of ${hexViewerState.searchResults.length}`);
+            }
+        });
+        
+        $('#hex-search-next').on('click', function() {
+            if (hexViewerState.searchResults && hexViewerState.searchResults.length > 0) {
+                hexViewerState.searchIndex++;
+                if (hexViewerState.searchIndex >= hexViewerState.searchResults.length) {
+                    hexViewerState.searchIndex = 0;
+                }
+                hexViewerState.offset = hexViewerState.searchResults[hexViewerState.searchIndex];
+                loadHexDump(hexViewerState.currentSection, hexViewerState.offset, hexViewerState.searchPattern, hexViewerState.searchResults);
+                $('#hex-search-results').text(`Match ${hexViewerState.searchIndex + 1} of ${hexViewerState.searchResults.length}`);
+            }
+        });
+    }
+    
+    function loadHexDump(sectionName, offset = 0, searchPattern = null, searchResults = null) {
+        console.log('[Memory] === loadHexDump START ===');
+        console.log('[Memory] loadHexDump called for:', sectionName, 'offset:', offset, 'searchPattern:', searchPattern, 'searchResults:', searchResults);
+        
+        const section = memoryData.sections.find(s => s.name === sectionName);
+        if (!section) {
+            console.error('[Memory] Section not found:', sectionName);
+            return;
+        }
+        
+        console.log('[Memory] Found section:', section);
+        hexViewerState.currentSection = sectionName;
+        hexViewerState.offset = offset;
+        
+        const hexContent = $('#hex-content');
+        console.log('[Memory] hex-content element found:', hexContent.length);
+        
+        
+        hexContent.html('<div class="text-gray-400 text-center py-4"><div class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div><p>Loading hex dump...</p></div>');
+        
+        
+        $.get(`/api/jobs/${currentJobId}/memory/${sectionName}/hex`, function(hexData) {
+            console.log('[Memory] Hex data received:', hexData);
+            
+            if (hexData && hexData.bytes && hexData.bytes.length > 0) {
+                renderHexBytes(hexData.bytes, section, false, offset, searchPattern, hexViewerState.searchResults);
+            } else {
+                const errorMsg = hexData && hexData.error ? hexData.error : 'No hex data available from Ghidra API';
+                $('#hex-content').html(`
+                    <div class="text-red-400 text-center py-4">
+                        <div class="text-4xl mb-3">⚠️</div>
+                        <p class="text-lg mb-2">${errorMsg}</p>
+                        <p class="text-sm text-gray-500">Hex data not available for this section</p>
+                    </div>
+                `);
+            }
+        }).fail(function(xhr) {
+            console.error('[Memory] Failed to fetch hex data:', xhr);
+            $('#hex-content').html(`
+                <div class="text-red-400 text-center py-4">
+                    <div class="text-4xl mb-3">❌</div>
+                    <p class="text-lg mb-2">Failed to load hex data</p>
+                    <p class="text-sm text-gray-500">API request failed</p>
+                </div>
+            `);
+        });
+    }
+    
+    function renderHexBytes(bytes, section, isDummy = false, offset = 0, searchPattern = null, searchResults = null) {
+        const hexContent = $('#hex-content');
+        const bytesPerLine = 16;
+        
+        const displayBytes = bytes.slice(offset, offset + 4096); 
+        const startAddress = section.address + offset;
+        
+        if (searchResults) {
+            hexViewerState.searchResults = searchResults;
+        }
+        
+        let searchBytes = [];
+        if (searchPattern) {
+            searchBytes = parseHexPattern(searchPattern);
+        }
+        
+        let html = `
+            <div class="text-gray-400 mb-2">
+                <span class="text-blue-400">${escapeHtml(section.name)}</span> @ 0x${section.address.toString(16).toUpperCase()} - 0x${(section.address + section.size).toString(16).toUpperCase()}
+            </div>
+            ${searchPattern ? `<div class="text-yellow-400 text-xs mb-2">🔍 Searching for: ${escapeHtml(searchPattern)}</div>` : ''}
+            <div class="text-gray-500 text-xs mb-2">Showing: ${formatSize(displayBytes.length)} starting at offset 0x${offset.toString(16).toUpperCase()}</div>
+            <div class="text-gray-500 text-xs mb-2">Total: ${Math.ceil(bytes.length / bytesPerLine)} lines (${formatSize(bytes.length)})</div>
+            <div class="bg-gray-900 rounded border border-gray-700 p-3 font-mono text-xs overflow-x-auto max-h-[600px] overflow-y-auto">
+        `;
+        
+        for (let i = 0; i < displayBytes.length; i += bytesPerLine) {
+            const lineBytes = displayBytes.slice(i, i + bytesPerLine);
+            const lineOffset = startAddress + i;
+            
+            const offsetHex = lineOffset.toString(16).padStart(8, '0').toUpperCase();
+            
+            let hexPart = '';
+            let asciiPart = '';
+            
+            for (let j = 0; j < lineBytes.length; j++) {
+                const byte = lineBytes[j];
+                const globalIndex = offset + i + j;
+                const hexByte = byte.toString(16).padStart(2, '0');
+                const asciiChar = (byte >= 32 && byte <= 126) ? String.fromCharCode(byte) : '.';
+                
+                const isMatch = hexViewerState.searchResults && 
+                               hexViewerState.searchResults.some(resultPos => {
+                                   const patternLength = searchBytes.length;
+                                   return globalIndex >= resultPos && 
+                                          globalIndex < resultPos + patternLength;
+                               });
+                
+                const highlightClass = isMatch ? 'bg-yellow-500 text-black' : 'text-gray-300';
+                
+                hexPart += `<span class="${highlightClass}">${hexByte}</span> `;
+                asciiPart += `<span class="${isMatch ? 'bg-yellow-500 text-black' : 'text-gray-400'}">${asciiChar}</span>`;
+            }
+            
+            html += `
+                <div class="flex">
+                    <span class="w-24 text-gray-400">${offsetHex}</span>
+                    <span class="w-48">${hexPart}</span>
+                    <span>${asciiPart}</span>
+                </div>
+            `;
+        }
+        
+        if (bytes.length > displayBytes.length) {
+            html += `<div class="text-gray-500 text-center mt-2">... showing ${formatSize(displayBytes.length)} of ${formatSize(bytes.length)}</div>`;
+        }
+        
+        html += '</div>';
+        
+        hexContent.html(html);
+        console.log('[Memory] Hex bytes rendered successfully');
+    }
+    
+    function initVirtualHexDump(section) {
+        const container = $('#hex-content');
+        const totalBytes = section.size;
+        const totalLines = Math.ceil(totalBytes / hexViewerState.bytesPerLine);
+        
+        hexViewerState.virtualScroll.totalLines = totalLines;
+        
+
+        const scrollContainer = $(`
+            <div class="hex-virtual-scroll mt-3 border border-gray-700 rounded bg-gray-900" 
+                 style="height: 320px; overflow-y: auto; position: relative;">
+                <div class="hex-spacer" style="height: ${totalLines * hexViewerState.virtualScroll.lineHeight}px;"></div>
+                <div class="hex-viewport" style="position: absolute; top: 0; left: 0; right: 0;"></div>
+            </div>
+        `);
+        
+        container.append(scrollContainer);
+        
+     
+        scrollContainer.on('scroll', function() {
+            const scrollTop = $(this).scrollTop();
+            hexViewerState.virtualScroll.scrollTop = scrollTop;
+            renderVisibleHexLines(scrollTop, totalLines);
+        });
+        
+      
+        renderVisibleHexLines(0, totalLines);
+    }
+    
+    function renderVisibleHexLines(scrollTop, totalLines) {
+        const viewport = $('.hex-viewport');
+        if (!viewport.length) return;
+        
+        const visibleLines = hexViewerState.virtualScroll.visibleLines;
+        const lineHeight = hexViewerState.virtualScroll.lineHeight;
+        const bytesPerLine = hexViewerState.bytesPerLine;
+        
+        const startLine = Math.floor(scrollTop / lineHeight);
+        const endLine = Math.min(startLine + visibleLines, totalLines);
+        
+        const startOffset = startLine * bytesPerLine;
+        const endOffset = endLine * bytesPerLine;
+        
+       
+        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
+            const bytes = hexData.bytes || [];
+            const displayBytes = bytes.slice(startOffset, endOffset);
+            
+            let html = '';
+            for (let i = 0; i < displayBytes.length; i += bytesPerLine) {
+                const lineBytes = displayBytes.slice(i, i + bytesPerLine);
+                const offset = startOffset + i;
+                
+                const hexPart = lineBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+                const asciiPart = lineBytes.map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.').join('');
+                
+                html += `
+                    <div class="flex text-xs font-mono" style="height: ${lineHeight}px; line-height: ${lineHeight}px;">
+                        <span class="w-24 text-gray-400">${offset.toString(16).padStart(8, '0').toUpperCase()}</span>
+                        <span class="w-48 text-gray-300">${hexPart}</span>
+                        <span class="text-gray-400">${asciiPart}</span>
+                    </div>
+                `;
+            }
+            
+            viewport.css('top', `${startLine * lineHeight}px`);
+            viewport.html(html);
+        }).fail(function() {
+            viewport.html('<div class="text-red-400 text-center py-4">Failed to load hex data</div>');
+        });
+    }
+    
+    function exportHexDump(sectionName) {
+        const section = memoryData.sections.find(s => s.name === sectionName);
+        if (!section) return;
+        
+        showToast('Exporting hex data...', 'info');
+        
+        $.get(`/api/jobs/${currentJobId}/memory/${sectionName}/hex`, function(hexData) {
+            if (hexData && hexData.bytes && hexData.bytes.length > 0) {
+                const exportData = {
+                    section: section.name,
+                    address: '0x' + section.address.toString(16).toUpperCase(),
+                    endAddress: '0x' + (section.address + section.size).toString(16).toUpperCase(),
+                    size: section.size,
+                    type: section.type || guessSectionTypeFromData(section),
+                    permissions: section.permissions,
+                    sectionType: hexData.section_type,
+                    hexData: Array.from(hexData.bytes),
+                    totalLines: Math.ceil(hexData.bytes.length / 16),
+                    timestamp: new Date().toISOString()
+                };
+                
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `memory_${section.name}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showToast(`Exported ${section.name} (${formatSize(hexData.bytes.length)})`, 'success');
+            } else {
+                showToast('No hex data available to export', 'error');
+            }
+        }).fail(function() {
+            showToast('Failed to load hex data for export', 'error');
+        });
+    }
+    
+    function showToast(message, type = 'info') {
+        const colors = {
+            success: 'bg-green-600',
+            error: 'bg-red-600',
+            warning: 'bg-yellow-600',
+            info: 'bg-blue-600'
+        };
+        
+        const toast = $(`
+            <div class="fixed bottom-4 right-4 ${colors[type]} text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm">
+                ${message}
+            </div>
+        `);
+        
+        $('body').append(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+    
+    function updateSidebarStatistics(data) {
+       
+        const validSections = data.sections.filter(section => {
+            if (!section) return false;
+            if (typeof section.size !== 'number' || section.size < 0) return false;
+            if (!section.address && section.address !== 0) return false;
+            return true;
+        });
+        
+        const totalSize = data.total_size || validSections.reduce((sum, s) => sum + s.size, 0);
+        $('#ml-total-size').text(formatSize(totalSize));
+        $('#ml-sections').text(validSections.length);
+        
+        const codeSize = validSections.filter(s => getSectionType(s.name) === 'code').reduce((sum, s) => sum + s.size, 0);
+        const dataSize = validSections.filter(s => getSectionType(s.name) === 'data').reduce((sum, s) => sum + s.size, 0);
+        
+        $('#ml-code-size').text(formatSize(codeSize));
+        $('#ml-data-size').text(formatSize(dataSize));
+    }
+    
+    function showSectionDetailsInSidebar(sectionName) {
+        const section = memoryData.sections.find(s => s.name === sectionName);
+        if (!section) return;
+
+        const startAddr = section.start || '0x' + section.address.toString(16);
+        const endAddr = section.end || '0x' + (section.address + section.size).toString(16);
+        const sectionType = (section.type && section.type !== 'unknown') ? section.type : guessSectionTypeFromData(section);
+        
+       
+        let permBadges = '';
+        if (typeof section.permissions === 'string') {
+            if (section.permissions.includes('R') || section.permissions.includes('r')) {
+                permBadges += '<span class="px-2 py-1 bg-green-600 text-white rounded text-xs">R</span> ';
+            } else {
+                permBadges += '<span class="px-2 py-1 bg-gray-600 text-gray-400 rounded text-xs">-</span> ';
+            }
+            if (section.permissions.includes('W') || section.permissions.includes('w')) {
+                permBadges += '<span class="px-2 py-1 bg-red-600 text-white rounded text-xs">W</span> ';
+            } else {
+                permBadges += '<span class="px-2 py-1 bg-gray-600 text-gray-400 rounded text-xs">-</span> ';
+            }
+            if (section.permissions.includes('X') || section.permissions.includes('x')) {
+                permBadges += '<span class="px-2 py-1 bg-blue-600 text-white rounded text-xs">X</span> ';
+            } else {
+                permBadges += '<span class="px-2 py-1 bg-gray-600 text-gray-400 rounded text-xs">-</span> ';
+            }
+        } else {
+            const perms = section.permissions || { read: false, write: false, execute: false };
+            if (perms.read || perms.read === true) {
+                permBadges += '<span class="px-2 py-1 bg-green-600 text-white rounded text-xs">R</span> ';
+            } else {
+                permBadges += '<span class="px-2 py-1 bg-gray-600 text-gray-400 rounded text-xs">-</span> ';
+            }
+            if (perms.write || perms.write === true) {
+                permBadges += '<span class="px-2 py-1 bg-red-600 text-white rounded text-xs">W</span> ';
+            } else {
+                permBadges += '<span class="px-2 py-1 bg-gray-600 text-gray-400 rounded text-xs">-</span> ';
+            }
+            if (perms.execute || perms.execute === true) {
+                permBadges += '<span class="px-2 py-1 bg-blue-600 text-white rounded text-xs">X</span> ';
+            } else {
+                permBadges += '<span class="px-2 py-1 bg-gray-600 text-gray-400 rounded text-xs">-</span> ';
+            }
+        }
+
+        const detailsHtml = `
+            <div class="space-y-3">
+                <div>
+                    <div class="text-xs text-gray-500">Block Name</div>
+                    <div class="text-sm text-gray-300 font-mono">${escapeHtml(section.name)}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">Start Address</div>
+                    <div class="font-mono text-sm text-gray-300">${escapeHtml(startAddr)}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">End Address</div>
+                    <div class="font-mono text-sm text-gray-300">${escapeHtml(endAddr)}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">Size</div>
+                    <div class="text-sm text-gray-300">${formatSize(section.size)}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">Type</div>
+                    <div class="text-sm text-gray-300 capitalize">${escapeHtml(sectionType)}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">Permissions</div>
+                    <div class="text-sm text-gray-300">
+                        <span class="inline-flex gap-1">
+                            ${permBadges}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#ml-section-details').html(detailsHtml);
+    }
+    
+    function filterSections(searchTerm) {
+        if (!searchTerm) {
+            $('.memory-section-row').show();
+            return;
+        }
+        
+        $('.memory-section-row').each(function() {
+            const sectionName = $(this).data('section').toLowerCase();
+            if (sectionName.includes(searchTerm)) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
     }
     function getPermissionBadges(permissions) {
         if (!permissions) return '';
@@ -375,21 +1000,11 @@ $(document).ready(function() {
         
         return 'bg-gray-600';
     }
-    let memoryMapScale = 1;
-
-    function adjustMemoryMapZoom(factor) {
-        memoryMapScale *= factor;
-        memoryMapScale = Math.max(1, Math.min(10, memoryMapScale));
-        $('#memory-map-container').css('width', `${memoryMapScale * 100}%`);
-    }
-
-    function resetMemoryMapZoom() {
-        memoryMapScale = 1;
-        $('#memory-map-container').css('width', '100%');
-    }
     function getSectionType(name) {
         if (!name) return 'unknown';
         const lowerName = name.toLowerCase();
+        
+      
         if (lowerName.includes('.text') || lowerName.includes('code')) return 'code';
         if (lowerName.includes('.data')) return 'data';
         if (lowerName.includes('.bss')) return 'bss';
@@ -398,6 +1013,157 @@ $(document).ready(function() {
         if (lowerName.includes('.edata') || lowerName.includes('export')) return 'export';
         if (lowerName.includes('stack')) return 'stack';
         if (lowerName.includes('heap')) return 'heap';
+        
+        return 'unknown';
+    }
+    
+    function guessSectionTypeFromData(section) {
+        if (!section) return 'unknown';
+        
+        const address = section.address || 0;
+        const size = section.size || 0;
+        const name = section.name || '';
+        const lowerName = name.toLowerCase();
+        const perms = section.permissions || '';
+        
+       
+        if (lowerName.includes('.text') || lowerName.includes('code') || lowerName.includes('_text')) return 'code';
+        if (lowerName.includes('.data') || lowerName.includes('_data') || lowerName.includes('.rdata')) return 'data';
+        if (lowerName.includes('.bss') || lowerName.includes('_bss')) return 'bss';
+        if (lowerName.includes('.rodata') || lowerName.includes('.rdata') || lowerName.includes('rodata')) return 'rodata';
+        if (lowerName.includes('.idata') || lowerName.includes('.import') || lowerName.includes('idata')) return 'import';
+        if (lowerName.includes('.edata') || lowerName.includes('.export') || lowerName.includes('edata')) return 'export';
+        if (lowerName.includes('.reloc') || lowerName.includes('reloc')) return 'reloc';
+        if (lowerName.includes('.rsrc') || lowerName.includes('resource') || lowerName.includes('rsrc')) return 'resource';
+        if (lowerName.includes('.tls') || lowerName.includes('tls')) return 'tls';
+        if (lowerName.includes('stack') || lowerName.includes('_stack')) return 'stack';
+        if (lowerName.includes('heap') || lowerName.includes('_heap')) return 'heap';
+        if (lowerName.includes('.symtab') || lowerName.includes('symbol')) return 'symbol';
+        if (lowerName.includes('.strtab') || lowerName.includes('string')) return 'string';
+        if (lowerName.includes('.dynsym') || lowerName.includes('dynamic')) return 'dynamic';
+        if (lowerName.includes('.got') || lowerName.includes('plt')) return 'got';
+        if (lowerName.includes('.init') || lowerName.includes('.fini')) return 'init';
+        
+
+        if (address >= 0x400000 && address < 0x410000 && size < 65536) {
+            if (perms.includes('X') || perms.includes('x')) return 'code';
+            return 'data';
+        }
+        
+       
+        if (address >= 0x400000 && address < 0x500000) {
+            if (perms.includes('X') || perms.includes('x')) return 'code';
+            if (size < 500000) return 'code';
+            return 'data';
+        }
+        
+       
+        if (address >= 0x500000 && address < 0x600000) {
+            return 'data';
+        }
+        
+
+        if (address >= 0x600000 && address < 0x700000) {
+            return 'resource';
+        }
+       
+        if (address >= 0x140000000 && address < 0x140010000) {
+            return 'code';
+        }
+        if (address >= 0x140010000 && address < 0x140020000) {
+            return 'data';
+        }
+        
+        if (address >= 0x10000000 && address < 0x11000000) {
+            if (perms.includes('X') || perms.includes('x')) return 'code';
+            return 'data';
+        }
+        
+     
+        if (size > 10485760) {
+            return 'data';
+        }
+        
+        
+        if (size > 1048576 && size < 10485760) {
+            if (address < 0x500000) return 'code';
+            if (address >= 0x140000000 && address < 0x140010000) return 'code';
+            return 'data';
+        }
+        
+      
+        if (size < 65536) {
+            if (address >= 0x400000 && address < 0x410000) return 'code';
+            if (address >= 0x500000 && address < 0x510000) return 'data';
+            if (address >= 0xfb000000) return 'data';
+            if (address >= 0x7ffe0000 && address <= 0x7fffffff) return 'stack';
+            return 'unknown';
+        }
+        
+       
+        if (address >= 0x08048000 && address < 0x08050000) {
+            return 'code';
+        }
+        if (address >= 0x08050000 && address < 0x08060000) {
+            return 'data';
+        }
+        
+       
+        if (address >= 0x5600000000 && address < 0x5600100000) {
+            return 'code';
+        }
+        if (address >= 0x5600100000 && address < 0x5600200000) {
+            return 'data';
+        }
+        
+      
+        if (address >= 0x08000000 && address < 0x09000000) {
+            if (perms.includes('X') || perms.includes('x')) return 'code';
+            return 'data';
+        }
+        
+       
+        if (address >= 0x7f0000000000 && address < 0x7f0100000000) {
+            if (perms.includes('X') || perms.includes('x')) return 'code';
+            return 'data';
+        }
+        
+      
+        if (address >= 0xc0000000 || address >= 0xffffffff80000000) {
+            return 'data';
+        }
+        
+      
+        if (address >= 0xffff800000000000) {
+            return 'data';
+        }
+        
+      
+        if (lowerName.includes('block')) {
+            if (address < 0x500000) return 'code';
+            if (address >= 0xfb000000) return 'data';
+            if (address >= 0x140000000 && address < 0x140010000) return 'code';
+            return 'data';
+        }
+        
+     
+        if (perms.includes('X') || perms.includes('x')) {
+            return 'code';
+        }
+        if (perms.includes('W') || perms.includes('w')) {
+            return 'data';
+        }
+        if (perms.includes('R') || perms.includes('r')) {
+            if (address < 0x500000) return 'code';
+            if (address >= 0x140000000 && address < 0x140010000) return 'code';
+            return 'data';
+        }
+        
+
+        if (address < 0x100000) return 'code';
+        if (address >= 0x100000 && address < 0x500000) return 'code';
+        if (address >= 0x500000 && address < 0x700000) return 'data';
+        
         return 'unknown';
     }
     function getSectionColor(type) {
@@ -459,13 +1225,6 @@ $(document).ready(function() {
     window.memoryLayoutManager = {
         initMemoryLayout: initMemoryLayout,
         renderMemoryLayout: renderMemoryLayout
-    };
-    let hexViewerState = {
-        currentSection: null,
-        offset: 0,
-        bytesPerLine: 16,
-        searchResults: [],
-        searchIndex: 0
     };
     function setupHexViewerHandlers() {
         $('#hex-search').on('click', function() {
@@ -593,15 +1352,7 @@ $(document).ready(function() {
             loadHexDump();
         }
     }
-    function loadHexDump() {
-        if (!hexViewerState.currentSection) return;
-        
-        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
-            renderHexDump(hexData);
-        }).fail(function() {
-            $('#hex-content').html('<div class="text-red-400 text-center py-4">Failed to load hex dump</div>');
-        });
-    }
+  
     function renderHexDump(hexData) {
         const bytes = hexData.bytes || [];
         const startOffset = Math.max(0, hexViewerState.offset);

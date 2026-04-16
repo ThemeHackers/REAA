@@ -286,6 +286,14 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
+                        <button id="pseudocode-btn" class="text-sm p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition flex items-center gap-2" title="View pseudocode files">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4">
+                                </path>
+                            </svg>
+                            Pseudocode
+                        </button>
                         <button id="refine-btn" class="hidden text-sm p-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition flex items-center gap-2" title="Refine all pseudocode files with LLM">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -589,77 +597,79 @@
                     Analysis Tools
                 </h2>
                 <div class="space-y-3">
-                    <button id="btn-function-graph"
-                        class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-indigo-900/30 hover:to-purple-900/30 border border-gray-700 hover:border-indigo-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
-                        <div
-                            class="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center group-hover:bg-indigo-500/30 transition-colors">
-                            <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
-                                </path>
-                            </svg>
-                        </div>
-                        <div class="flex-1">
-                            <span class="font-medium">Function Graph</span>
-                            <p class="text-xs text-gray-500 mt-0.5">Visualize call relationships</p>
-                        </div>
-                    </button>
                     <button id="btn-memory-layout"
-                        class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-green-900/30 hover:to-emerald-900/30 border border-gray-700 hover:border-green-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
-                        <div
-                            class="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center group-hover:bg-green-500/30 transition-colors">
-                            <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01">
-                                </path>
+                        class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-blue-900/30 hover:to-cyan-900/30 border border-gray-700 hover:border-blue-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
+                        <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+                            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16"></path>
                             </svg>
                         </div>
                         <div class="flex-1">
                             <span class="font-medium">Memory Layout</span>
-                            <p class="text-xs text-gray-500 mt-0.5">View memory sections</p>
+                            <p class="text-xs text-gray-500 mt-0.5">View memory sections and hex dumps</p>
                         </div>
                     </button>
-                    <button id="btn-control-flow"
+                    <button id="btn-memory-analysis"
                         class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-purple-900/30 hover:to-pink-900/30 border border-gray-700 hover:border-purple-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
-                        <div
-                            class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30 transition-colors">
+                        <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30 transition-colors">
                             <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4">
-                                </path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                             </svg>
                         </div>
                         <div class="flex-1">
-                            <span class="font-medium">Control Flow</span>
-                            <p class="text-xs text-gray-500 mt-0.5">Analyze execution paths</p>
+                            <span class="font-medium">Memory Analysis</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Statistics, entropy, and encrypted data detection</p>
                         </div>
                     </button>
-                    <button id="btn-timeline-view"
-                        class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-yellow-900/30 hover:to-orange-900/30 border border-gray-700 hover:border-yellow-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
-                        <div
-                            class="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center group-hover:bg-yellow-500/30 transition-colors">
-                            <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    <button id="btn-memory-strings"
+                        class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-orange-900/30 hover:to-amber-900/30 border border-gray-700 hover:border-orange-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
+                        <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center group-hover:bg-orange-500/30 transition-colors">
+                            <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path>
                             </svg>
                         </div>
                         <div class="flex-1">
-                            <span class="font-medium">Timeline View</span>
-                            <p class="text-xs text-gray-500 mt-0.5">Analysis progress</p>
+                            <span class="font-medium">Memory Strings</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Extract ASCII strings from memory</p>
                         </div>
                     </button>
-                </div>
-            </div>
-            <div class="p-6 border-b border-gray-800">
-                <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z">
-                        </path>
-                    </svg>
-                    Refine Pseudocode
-                </h2>
-                <div class="space-y-3">
+                    <button id="btn-memory-xref"
+                        class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-cyan-900/30 hover:to-teal-900/30 border border-gray-700 hover:border-cyan-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
+                        <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center group-hover:bg-cyan-500/30 transition-colors">
+                            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <span class="font-medium">Cross-References</span>
+                            <p class="text-xs text-gray-500 mt-0.5">View callers, callees, and data refs</p>
+                        </div>
+                    </button>
+                    <button id="btn-memory-compare"
+                        class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-rose-900/30 hover:to-red-900/30 border border-gray-700 hover:border-rose-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
+                        <div class="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center group-hover:bg-rose-500/30 transition-colors">
+                            <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <span class="font-medium">Compare Sections</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Compare two memory sections byte-by-byte</p>
+                        </div>
+                    </button>
+                    <button id="btn-pattern-search"
+                        class="group w-full text-left px-4 py-3 bg-gradient-to-r from-gray-800 to-gray-800 hover:from-indigo-900/30 hover:to-violet-900/30 border border-gray-700 hover:border-indigo-500/50 rounded-xl transition-all duration-300 text-sm text-gray-200 flex items-center gap-3 shadow-sm hover:shadow-md">
+                        <div class="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center group-hover:bg-indigo-500/30 transition-colors">
+                            <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <span class="font-medium">Pattern Search</span>
+                            <p class="text-xs text-gray-500 mt-0.5">Search hex, regex, or wildcard patterns</p>
+                        </div>
+                    </button>
                     <button id="btn-refine-all"
                         class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-lg">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -791,6 +801,26 @@
         </div>
     </div>
 
+    <div id="alert-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-md p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                        </path>
+                    </svg>
+                </div>
+                <h2 class="text-lg font-semibold text-white">Attention Required</h2>
+            </div>
+            <p id="alert-message" class="text-gray-300 mb-6">Please select a job first to view pseudocode files</p>
+            <div class="flex justify-end">
+                <button id="close-alert" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm transition">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
 
     <div id="remote-settings-modal"
         class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -829,6 +859,7 @@
                                 class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                                 placeholder="http://127.0.0.1:5000">
                             <p class="text-xs text-gray-500 mt-1">URL of remote analysis server</p>
+                            <p class="text-xs text-yellow-500 mt-1">⚠️ Note: Socket.IO runs on port 5000 (web UI), not port 8000 (FastAPI backend)</p>
                         </div>
 
                         <div class="mt-4">
@@ -906,112 +937,6 @@
     </div>
 
 
-    <div id="function-graph-modal"
-        class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-gray-900 border border-gray-700 w-full max-w-[95vw] h-[90vh] p-0 flex flex-col rounded-xl shadow-2xl">
-            <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-gray-800 to-gray-900 border-b border-gray-700">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h2 class="text-xl font-bold text-white">Function Graph</h2>
-                        <p class="text-xs text-gray-400">Visualize call relationships and dependencies</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button id="fg-toggle-sidebar" class="p-2 hover:bg-gray-700 rounded-lg transition text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                        </svg>
-                    </button>
-                    <button id="close-function-graph" class="p-2 hover:bg-red-600 rounded-lg transition text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div class="flex flex-1 overflow-hidden">
-                <div class="flex-1 flex flex-col">
-                    <div class="px-6 py-3 bg-gray-800 border-b border-gray-700">
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <div class="flex-1 min-w-[200px]">
-                                <input type="text" id="fg-search" placeholder="Search nodes..." 
-                                       class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
-                            </div>
-                            <select id="fg-layout" class="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-indigo-500">
-                                <option value="force">Force Layout</option>
-                                <option value="circular">Circular Layout</option>
-                                <option value="grid">Grid Layout</option>
-                                <option value="hierarchical">Hierarchical Layout</option>
-                            </select>
-                            <div class="flex gap-1">
-                                <button id="fg-zoom-in" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Zoom In">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                                    </svg>
-                                </button>
-                                <button id="fg-zoom-out" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Zoom Out">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
-                                    </svg>
-                                </button>
-                                <button id="fg-fit" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Fit View">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="flex gap-2 ml-auto">
-                                <button id="fg-save" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition">
-                                    Save Layout
-                                </button>
-                                <button id="fg-export" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition">
-                                    Export
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="callgraph-container" class="flex-1 bg-gray-900 overflow-auto relative">
-                        <div id="fg-loading" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900/80">
-                            <div class="text-center">
-                                <div class="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                                <p class="text-gray-400 text-sm">Loading graph...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="fg-sidebar" class="w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
-                    <div class="p-4 border-b border-gray-700">
-                        <h3 class="text-sm font-semibold text-white mb-2">Node Details</h3>
-                        <div id="fg-node-details" class="text-gray-400 text-sm">
-                            Select a node to view details
-                        </div>
-                    </div>
-                    <div class="p-4 border-b border-gray-700">
-                        <h3 class="text-sm font-semibold text-white mb-2">Statistics</h3>
-                        <div id="fg-stats" class="space-y-2 text-xs text-gray-400">
-                            <div class="flex justify-between"><span>Total Nodes:</span><span id="fg-total-nodes">0</span></div>
-                            <div class="flex justify-between"><span>Total Edges:</span><span id="fg-total-edges">0</span></div>
-                            <div class="flex justify-between"><span>Selected:</span><span id="fg-selected">0</span></div>
-                        </div>
-                    </div>
-                    <div class="p-4 flex-1 overflow-auto">
-                        <h3 class="text-sm font-semibold text-white mb-2">Legend</h3>
-                        <div class="space-y-2 text-xs">
-                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-green-500"></div><span class="text-gray-400">External Functions</span></div>
-                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-blue-500"></div><span class="text-gray-400">Internal Functions</span></div>
-                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-yellow-500"></div><span class="text-gray-400">Library Functions</span></div>
-                            <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-purple-500"></div><span class="text-gray-400">API Functions</span></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
 
     <div id="graph-viz-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1089,29 +1014,9 @@
                                 <input type="text" id="ml-search" placeholder="Search sections..." 
                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
                             </div>
-                            <div class="flex gap-1">
-                                <button id="ml-zoom-in" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Zoom In">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                                    </svg>
-                                </button>
-                                <button id="ml-zoom-out" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Zoom Out">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="flex gap-2 ml-auto">
-                                <button id="ml-hex" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
-                                    Hex Viewer
-                                </button>
-                                <button id="ml-diff" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition">
-                                    Compare
-                                </button>
-                            </div>
                         </div>
                     </div>
-                    <div id="memory-container" class="flex-1 bg-gray-900 overflow-auto relative">
+                    <div id="memory-container" class="flex-1 bg-gray-900 overflow-auto relative p-6">
                         <div id="ml-loading" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900/80">
                             <div class="text-center">
                                 <div class="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
@@ -1137,232 +1042,12 @@
                         </div>
                     </div>
                     <div class="p-4 flex-1 overflow-auto">
-                        <h3 class="text-sm font-semibold text-white mb-2">Quick Actions</h3>
-                        <div class="space-y-2">
-                            <button id="ml-snapshot" class="w-full px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition">
-                                Save Snapshot
-                            </button>
-                            <button id="ml-heatmap" class="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition">
-                                Heat Map
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-
-    <div id="control-flow-modal"
-        class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-gray-900 border border-gray-700 w-full max-w-[95vw] h-[90vh] p-0 flex flex-col rounded-xl shadow-2xl">
-            <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-green-900 to-gray-900 border-b border-gray-700">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h2 class="text-xl font-bold text-white">Control Flow Graph</h2>
-                        <p class="text-xs text-gray-400">Analyze execution paths and basic blocks</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button id="cf-toggle-sidebar" class="p-2 hover:bg-gray-700 rounded-lg transition text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                        </svg>
-                    </button>
-                    <button id="close-control-flow" class="p-2 hover:bg-red-600 rounded-lg transition text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div class="flex flex-1 overflow-hidden">
-                <div class="flex-1 flex flex-col">
-                    <div class="px-6 py-3 bg-gray-800 border-b border-gray-700">
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <div class="flex-1 min-w-[200px]">
-                                <select id="cf-function-select" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500">
-                                    <option value="">Select Function...</option>
-                                </select>
-                            </div>
-                            <select id="cf-layout" class="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-green-500">
-                                <option value="force">Force Layout</option>
-                                <option value="hierarchical">Hierarchical Layout</option>
-                            </select>
-                            <div class="flex gap-1">
-                                <button id="cf-zoom-in" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Zoom In">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                                    </svg>
-                                </button>
-                                <button id="cf-zoom-out" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Zoom Out">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
-                                    </svg>
-                                </button>
-                                <button id="cf-fit" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Fit View">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="flex gap-2 ml-auto">
-                                <button id="cf-patterns" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition">
-                                    Detect Patterns
-                                </button>
-                                <button id="cf-export" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition">
-                                    Export
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="controlflow-container" class="flex-1 bg-gray-900 overflow-auto relative">
-                        <div id="cf-loading" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900/80">
-                            <div class="text-center">
-                                <div class="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                                <p class="text-gray-400 text-sm">Loading control flow...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="cf-sidebar" class="w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
-                    <div class="p-4 border-b border-gray-700">
-                        <h3 class="text-sm font-semibold text-white mb-2">Block Details</h3>
-                        <div id="cf-block-details" class="text-gray-400 text-sm">
-                            Select a block to view details
-                        </div>
-                    </div>
-                    <div class="p-4 border-b border-gray-700">
-                        <h3 class="text-sm font-semibold text-white mb-2">Cross-References</h3>
-                        <div id="cf-xref-summary" class="text-xs text-gray-400">
-                            Loading...
-                        </div>
-                    </div>
-                    <div class="p-4 flex-1 overflow-auto">
-                        <h3 class="text-sm font-semibold text-white mb-2">Quick Actions</h3>
-                        <div class="space-y-2">
-                            <button id="cf-annotate" class="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
-                                Add Annotation
-                            </button>
-                            <button id="cf-instructions" class="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition">
-                                View Instructions
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-
-    <div id="timeline-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-gray-900 border border-gray-700 w-full max-w-[95vw] h-[90vh] p-0 flex flex-col rounded-xl shadow-2xl">
-            <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-purple-900 to-gray-900 border-b border-gray-700">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h2 class="text-xl font-bold text-white">Analysis Timeline</h2>
-                        <p class="text-xs text-gray-400">Track analysis progress and events</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button id="tl-toggle-sidebar" class="p-2 hover:bg-gray-700 rounded-lg transition text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                        </svg>
-                    </button>
-                    <button id="close-timeline" class="p-2 hover:bg-red-600 rounded-lg transition text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div class="flex flex-1 overflow-hidden">
-                <div class="flex-1 flex flex-col">
-                    <div class="px-6 py-3 bg-gray-800 border-b border-gray-700">
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <div class="flex-1 min-w-[200px]">
-                                <input type="text" id="tl-search" placeholder="Search events..." 
-                                       class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500">
-                            </div>
-                            <select id="tl-view" class="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-purple-500">
-                                <option value="gantt">Gantt Chart</option>
-                                <option value="sequence">Sequence Diagram</option>
-                                <option value="activity">Activity Diagram</option>
-                                <option value="milestone">Milestone View</option>
-                            </select>
-                            <div class="flex gap-1">
-                                <button id="tl-zoom-in" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Zoom In">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                                    </svg>
-                                </button>
-                                <button id="tl-zoom-out" class="p-2 hover:bg-gray-600 rounded-lg transition text-gray-400 hover:text-white" title="Zoom Out">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="flex gap-2 ml-auto">
-                                <button id="tl-milestone" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition">
-                                    Add Milestone
-                                </button>
-                                <button id="tl-report" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition">
-                                    Generate Report
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="timeline-container" class="flex-1 bg-gray-900 overflow-auto relative">
-                        <div id="tl-loading" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900/80">
-                            <div class="text-center">
-                                <div class="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                                <p class="text-gray-400 text-sm">Loading timeline...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="tl-sidebar" class="w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
-                    <div class="p-4 border-b border-gray-700">
-                        <h3 class="text-sm font-semibold text-white mb-2">Event Details</h3>
-                        <div id="tl-event-details" class="text-gray-400 text-sm">
-                            Select an event to view details
-                        </div>
-                    </div>
-                    <div class="p-4 border-b border-gray-700">
-                        <h3 class="text-sm font-semibold text-white mb-2">Timeline Statistics</h3>
-                        <div id="tl-stats" class="space-y-2 text-xs text-gray-400">
-                            <div class="flex justify-between"><span>Total Events:</span><span id="tl-total-events">0</span></div>
-                            <div class="flex justify-between"><span>Completed:</span><span id="tl-completed">0</span></div>
-                            <div class="flex justify-between"><span>In Progress:</span><span id="tl-in-progress">0</span></div>
-                            <div class="flex justify-between"><span>Failed:</span><span id="tl-failed">0</span></div>
-                        </div>
-                    </div>
-                    <div class="p-4 flex-1 overflow-auto">
-                        <h3 class="text-sm font-semibold text-white mb-2">Quick Actions</h3>
-                        <div class="space-y-2">
-                            <button id="tl-dependencies" class="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
-                                Show Dependencies
-                            </button>
-                            <button id="tl-scrubber" class="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition">
-                                Time Scrubber
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div id="refine-select-modal"
         class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1378,7 +1063,7 @@
                     </div>
                     <div>
                         <h2 class="text-xl font-bold text-white">Select Files to Refine</h2>
-                        <p class="text-xs text-gray-400">Choose pseudocode files from artifacts for LLM refinement</p>
+                        <p class="text-xs text-gray-400">Choose pseudocode files from artifacts for LLM refinement <span class="text-gray-500">(Press ESC to close)</span></p>
                     </div>
                 </div>
                 <button id="close-refine-select" class="text-gray-400 hover:text-white transition">
@@ -1436,7 +1121,38 @@
         </div>
     </div>
 
+    <div id="generic-modal"
+        class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b border-gray-700">
+                <h3 id="generic-modal-title" class="text-lg font-semibold text-white">Modal Title</h3>
+                <button id="close-generic-modal" class="text-gray-400 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="generic-modal-content" class="flex-1 overflow-y-auto p-4">
+                <!-- Content will be injected here -->
+            </div>
+        </div>
+    </div>
+
     <script>
+
+        function showModal(title, content) {
+            $('#generic-modal-title').text(title);
+            $('#generic-modal-content').html(content);
+            $('#generic-modal').removeClass('hidden');
+        }
+
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
 
         function toggleSidebar(modalId, sidebarId) {
             const modal = document.getElementById(modalId);
@@ -1447,10 +1163,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('fg-toggle-sidebar')?.addEventListener('click', () => toggleSidebar('function-graph-modal', 'fg-sidebar'));
             document.getElementById('ml-toggle-sidebar')?.addEventListener('click', () => toggleSidebar('memory-layout-modal', 'ml-sidebar'));
-            document.getElementById('cf-toggle-sidebar')?.addEventListener('click', () => toggleSidebar('control-flow-modal', 'cf-sidebar'));
-            document.getElementById('tl-toggle-sidebar')?.addEventListener('click', () => toggleSidebar('timeline-modal', 'tl-sidebar'));
         });
 
         function showToast(message, type = 'info', duration = 3000) {
@@ -1924,7 +1637,31 @@
                 });
 
                 $('#close-refine-select').on('click', closeRefineSelectModal);
-                $('#refine-cancel').on('click', closeRefineSelectModal);
+                $('#refine-cancel').on('click', function() { closeRefineSelectModal(true); });
+
+                // ESC key to close modal (preserves state)
+                $(document).on('keydown', function(e) {
+                    if (e.key === 'Escape' && !$('#refine-select-modal').hasClass('hidden')) {
+                        e.preventDefault();
+                        closeRefineSelectModal(true);
+                    }
+                });
+
+                // ESC key for memory-layout-modal
+                $(document).on('keydown', function(e) {
+                    if (e.key === 'Escape' && !$('#memory-layout-modal').hasClass('hidden')) {
+                        e.preventDefault();
+                        $('#memory-layout-modal').addClass('hidden');
+                    }
+                });
+
+                // ESC key for generic-modal
+                $(document).on('keydown', function(e) {
+                    if (e.key === 'Escape' && !$('#generic-modal').hasClass('hidden')) {
+                        e.preventDefault();
+                        $('#generic-modal').addClass('hidden');
+                    }
+                });
 
                 $('#refine-select-all').on('click', function() {
                     $('#refine-files-list input[type="checkbox"]').prop('checked', true);
@@ -1948,69 +1685,87 @@
                     });
                 });
 
-                $('#refine-confirm').on('click', function() {
+                $('#refine-confirm').on('click', async function() {
+                    console.log('[DEBUG] refine-confirm clicked, selectedRefineFiles:', selectedRefineFiles);
                     if (selectedRefineFiles.size === 0) {
+                        console.log('[DEBUG] No files selected, showing warning');
                         showToast('No files selected', 'warning');
                         return;
                     }
-                    
+                    console.log('[DEBUG] Proceeding with refinement for files:', Array.from(selectedRefineFiles));
+
                     const $btn = $(this);
                     $btn.prop('disabled', true).text('Refining...');
-                    
+
                     const filesArray = Array.from(selectedRefineFiles);
-                    
+
                     renderMessage('assistant', `🔄 **Starting Selective Refinement**\n\nRefining ${filesArray.length} selected pseudocode files for job \`${currentJobId.substring(0, 8)}...\`...\n\n**Files to refine:**\n${filesArray.map(f => `- \`${f}\``).join('\n')}`);
-                    
-                    $.ajax({
-                        url: `/api/jobs/${currentJobId}/refine/selective`,
-                        method: 'POST',
-                        data: JSON.stringify({ files: filesArray }),
-                        contentType: 'application/json',
-                        success: function(data) {
-                            closeRefineSelectModal();
-                            $btn.prop('disabled', false).text('Refine Selected');
-                            
-                            let resultSummary = `🔄 **Selective Refinement Complete**\n\n**Total files processed:** ${data.total_files}\n**Successfully refined:** ${data.success}\n**Errors:** ${data.errors}\n\n`;
-                            
-                            if (data.results && data.results.length > 0) {
-                                resultSummary += `**Processing details:**\n\n`;
-                                data.results.forEach((result, index) => {
-                                    const statusIcon = result.status === 'success' ? '✅' : '❌';
-                                    const statusText = result.status === 'success' ? 'Success' : `Error: ${result.error || 'Unknown'}`;
-                                    resultSummary += `${index + 1}. ${statusIcon} \`${result.addr}\` - ${statusText}\n`;
-                                });
-                            }
-                            
-                            renderMessage('assistant', resultSummary);
-                            showToast(`Refined ${data.success}/${data.total_files} files successfully`, data.success === data.total_files ? 'success' : 'warning');
-                            
-                            if (data.errors > 0) {
-                                console.error('Refinement errors:', data.results.filter(r => r.status === 'error'));
-                            }
-                        },
-                        error: function(xhr) {
-                            closeRefineSelectModal();
-                            $btn.prop('disabled', false).text('Refine Selected');
-                            renderMessage('assistant', `❌ **Refinement Failed**\n\nError: ${xhr.responseJSON?.error || 'Unknown error'}`);
-                            showToast('Refinement failed: ' + (xhr.responseJSON?.error || 'Unknown error'), 'error');
+
+                    console.log('[DEBUG] Making fetch call to:', `/api/jobs/${currentJobId}/refine/selective`);
+                    console.log('[DEBUG] Request data:', { files: filesArray });
+
+                    try {
+                        const response = await fetch(`/api/jobs/${currentJobId}/refine/selective`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ files: filesArray })
+                        });
+
+                        console.log('[DEBUG] Fetch response received, status:', response.status);
+                        console.log('[DEBUG] Response ok:', response.ok);
+
+                        const data = await response.json();
+                        console.log('[DEBUG] Response data:', data);
+
+                        if (!response.ok) {
+                            throw new Error(data.error || `HTTP ${response.status}`);
                         }
-                    });
+
+                        closeRefineSelectModal();
+                        $btn.prop('disabled', false).text('Refine Selected');
+
+                        let resultSummary = `🔄 **Selective Refinement Complete**\n\n**Total files processed:** ${data.total_files}\n**Successfully refined:** ${data.success}\n**Errors:** ${data.errors}\n\n`;
+
+                        if (data.results && data.results.length > 0) {
+                            resultSummary += `**Processing details:**\n\n`;
+                            data.results.forEach((result, index) => {
+                                const statusIcon = result.status === 'success' ? '✅' : '❌';
+                                const statusText = result.status === 'success' ? 'Success' : `Error: ${result.error || 'Unknown'}`;
+                                resultSummary += `${index + 1}. ${statusIcon} \`${result.addr}\` - ${statusText}\n`;
+                            });
+                        }
+
+                        renderMessage('assistant', resultSummary);
+                        showToast(`Refined ${data.success}/${data.total_files} files successfully`, data.success === data.total_files ? 'success' : 'warning');
+
+                        if (data.errors > 0) {
+                            console.error('Refinement errors:', data.results.filter(r => r.status === 'error'));
+                        }
+                    } catch (error) {
+                        console.error('[DEBUG] Fetch error:', error);
+                        closeRefineSelectModal();
+                        $btn.prop('disabled', false).text('Refine Selected');
+                        renderMessage('assistant', `❌ **Refinement Failed**\n\nError: ${error.message}`);
+                        showToast('Refinement failed: ' + error.message, 'error');
+                    }
                 });
 
                 function openRefineSelectModal() {
-                    selectedRefineFiles.clear();
-                    allPseudocodeFiles = [];
                     $('#refine-select-modal').removeClass('hidden');
                     loadPseudocodeFiles();
                 }
 
-                function closeRefineSelectModal() {
+                function closeRefineSelectModal(preserveState = false) {
                     $('#refine-select-modal').addClass('hidden');
-                    selectedRefineFiles.clear();
-                    allPseudocodeFiles = [];
-                    $('#refine-files-list').empty();
-                    $('#refine-search').val('');
-                    updateSelectedFiles();
+                    if (!preserveState) {
+                        selectedRefineFiles.clear();
+                        allPseudocodeFiles = [];
+                        $('#refine-files-list').empty();
+                        $('#refine-search').val('');
+                        updateSelectedFiles();
+                    }
                 }
 
                 function loadPseudocodeFiles() {
@@ -2166,6 +1921,33 @@
                                     <div class="flex justify-between items-center">
                                         <span class="text-sm text-gray-400">Processes</span>
                                         <span class="text-sm font-semibold text-gray-200">${data.process_count}</span>
+                                    </div>
+                                `;
+                            }
+
+                            if (data.gpu_clock_mhz !== null) {
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">GPU Clock</span>
+                                        <span class="text-sm font-semibold text-orange-400">${data.gpu_clock_mhz} MHz</span>
+                                    </div>
+                                `;
+                            }
+
+                            if (data.memory_clock_effective_mhz !== null) {
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">Memory Clock</span>
+                                        <span class="text-sm font-semibold text-pink-400">${data.memory_clock_effective_mhz} MHz (Effective)</span>
+                                    </div>
+                                `;
+                            }
+
+                            if (data.fan_speed_percent !== null) {
+                                gpuHtml += `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-gray-400">Fan Speed</span>
+                                        <span class="text-sm font-semibold text-cyan-400">${data.fan_speed_percent}%</span>
                                     </div>
                                 `;
                             }
@@ -2804,6 +2586,18 @@
                     $('#settings-modal').removeClass('hidden');
                 });
 
+                $('#pseudocode-btn').on('click', function () {
+                    if (currentJobId) {
+                        window.location.href = `/pseudocode?job_id=${currentJobId}`;
+                    } else {
+                        $('#alert-modal').removeClass('hidden');
+                    }
+                });
+
+                $('#close-alert').on('click', function () {
+                    $('#alert-modal').addClass('hidden');
+                });
+
                 $('#close-settings').on('click', function () {
                     $('#settings-modal').addClass('hidden');
                 });
@@ -2858,23 +2652,6 @@
                 });
 
 
-                $('#btn-function-graph').on('click', function () {
-                    const selectedJob = $('.job-item.border-indigo-500');
-                    const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
-                    if (!currentJobId) {
-                        showToast('Please select a job first', 'warning');
-                        return;
-                    }
-
-                    $('#function-graph-modal').removeClass('hidden');
-
-                    if (typeof callGraphManager !== 'undefined') {
-                        callGraphManager.initCallGraph(currentJobId);
-                    } else {
-                        $('#callgraph-container').html('<div class="text-center text-gray-500 py-8">Call graph manager not available</div>');
-                    }
-                });
-
                 $('#btn-memory-layout').on('click', function () {
                     const selectedJob = $('.job-item.border-indigo-500');
                     const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
@@ -2885,55 +2662,11 @@
 
                     $('#memory-layout-modal').removeClass('hidden');
 
-                    if (typeof memoryManager !== 'undefined') {
-                        memoryManager.initMemoryLayout(currentJobId);
+                    if (typeof memoryLayoutManager !== 'undefined') {
+                        memoryLayoutManager.initMemoryLayout(currentJobId);
                     } else {
                         $('#memory-container').html('<div class="text-center text-gray-500 py-8">Memory manager not available</div>');
                     }
-                });
-
-                $('#btn-control-flow').on('click', function () {
-                    const selectedJob = $('.job-item.border-indigo-500');
-                    const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
-                    if (!currentJobId) {
-                        showToast('Please select a job first', 'warning');
-                        return;
-                    }
-
-
-                    $('#control-flow-modal').removeClass('hidden');
-
-
-                    if (typeof controlFlowManager !== 'undefined') {
-                        controlFlowManager.initControlFlowGraph(currentJobId, 'entry0');
-                    } else {
-                        $('#controlflow-container').html('<div class="text-center text-gray-500 py-8">Control flow manager not available</div>');
-                    }
-                });
-
-                $('#btn-timeline-view').on('click', function () {
-                    const selectedJob = $('.job-item.border-indigo-500');
-                    const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
-                    if (!currentJobId) {
-                        showToast('Please select a job first', 'warning');
-                        return;
-                    }
-
-
-                    $('#timeline-modal').removeClass('hidden');
-
-
-                    if (typeof timelineManager !== 'undefined') {
-                        timelineManager.initTimeline(currentJobId);
-                    } else {
-                        $('#timeline-container').html('<div class="text-center text-gray-500 py-8">Timeline manager not available</div>');
-                    }
-                });
-
-
-                $('#close-function-graph').on('click', function (event) {
-                    event.stopPropagation();
-                    $('#function-graph-modal').addClass('hidden');
                 });
 
                 $('#close-memory-layout').on('click', function (event) {
@@ -2941,26 +2674,333 @@
                     $('#memory-layout-modal').addClass('hidden');
                 });
 
-                $('#close-control-flow').on('click', function (event) {
-                    event.stopPropagation();
-                    $('#control-flow-modal').addClass('hidden');
-                });
-
-                $('#close-timeline').on('click', function () {
-                    $('#timeline-modal').addClass('hidden');
-                });
-
                 $('#close-graph-viz').on('click', function () {
                     $('#graph-viz-modal').addClass('hidden');
+                });
+
+                $('#close-generic-modal').on('click', function () {
+                    $('#generic-modal').addClass('hidden');
+                });
+
+                $('#btn-memory-analysis').on('click', function () {
+                    const selectedJob = $('.job-item.border-indigo-500');
+                    const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'warning');
+                        return;
+                    }
+
+                    $.get(`/api/jobs/${currentJobId}/memory/analysis`, function(data) {
+                        if (!data) {
+                            showToast('No data received', 'error');
+                            return;
+                        }
+                        showModal('Memory Analysis', `
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="bg-gray-800 p-4 rounded-lg">
+                                        <div class="text-2xl font-bold text-blue-400">${data.total_sections || 0}</div>
+                                        <div class="text-xs text-gray-400">Total Sections</div>
+                                    </div>
+                                    <div class="bg-gray-800 p-4 rounded-lg">
+                                        <div class="text-2xl font-bold text-green-400">${formatSize(data.total_size || 0)}</div>
+                                        <div class="text-xs text-gray-400">Total Size</div>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-800 p-4 rounded-lg">
+                                    <h4 class="text-sm font-semibold text-gray-300 mb-2">Sections by Type</h4>
+                                    <div class="space-y-1">
+                                        ${Object.entries(data.sections_by_type || {}).map(([type, count]) => `
+                                            <div class="flex justify-between text-xs">
+                                                <span class="text-gray-400">${type}</span>
+                                                <span class="text-gray-200">${count}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                <div class="bg-gray-800 p-4 rounded-lg">
+                                    <h4 class="text-sm font-semibold text-gray-300 mb-2">Entropy Analysis</h4>
+                                    <div class="space-y-2">
+                                        ${(data.entropy_analysis || []).map(ea => `
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span class="text-gray-400">${ea.section}</span>
+                                                <span class="${ea.is_encrypted ? 'text-red-400' : 'text-green-400'}">${ea.entropy.toFixed(2)} ${ea.is_encrypted ? '(encrypted)' : ''}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        `);
+                    }).fail(function() {
+                        showToast('Failed to load memory analysis', 'error');
+                    });
+                });
+
+                $('#btn-memory-strings').on('click', function () {
+                    const selectedJob = $('.job-item.border-indigo-500');
+                    const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'warning');
+                        return;
+                    }
+
+                    $.get(`/api/jobs/${currentJobId}/memory/strings?min_length=4`, function(data) {
+                        if (!data || !data.strings) {
+                            showToast('No data received', 'error');
+                            return;
+                        }
+                        showModal('Memory Strings', `
+                            <div class="space-y-4">
+                                <div class="bg-gray-800 p-4 rounded-lg">
+                                    <div class="text-2xl font-bold text-orange-400">${data.count || 0}</div>
+                                    <div class="text-xs text-gray-400">Strings Found (min length: ${data.min_length || 4})</div>
+                                </div>
+                                <div class="bg-gray-800 p-4 rounded-lg max-h-96 overflow-y-auto">
+                                    <div class="space-y-2">
+                                        ${data.strings.slice(0, 100).map(s => `
+                                            <div class="p-2 bg-gray-900 rounded text-xs">
+                                                <div class="text-gray-400 font-mono">${s.address}</div>
+                                                <div class="text-gray-200">${s.string}</div>
+                                                <div class="text-gray-500">${s.section} | ${s.encoding} | ${s.length} chars</div>
+                                            </div>
+                                        `).join('')}
+                                        ${data.strings.length > 100 ? '<div class="text-center text-gray-500 text-xs">... and ' + (data.strings.length - 100) + ' more</div>' : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `);
+                    }).fail(function() {
+                        showToast('Failed to load memory strings', 'error');
+                    });
+                });
+
+                $('#btn-memory-xref').on('click', function () {
+                    const selectedJob = $('.job-item.border-indigo-500');
+                    const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'warning');
+                        return;
+                    }
+
+                    showModal('Enter Memory Address', `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-2">Memory Address</label>
+                                <input type="text" id="xref-address-input" 
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500"
+                                    placeholder="e.g., 0x401000">
+                            </div>
+                            <button id="xref-submit-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition">
+                                Get Cross-References
+                            </button>
+                        </div>
+                    `);
+
+                    $('#xref-submit-btn').on('click', function() {
+                        const address = $('#xref-address-input').val();
+                        if (!address) {
+                            showToast('Please enter an address', 'warning');
+                            return;
+                        }
+
+                        $.get(`/api/jobs/${currentJobId}/memory/${address}/xref`, function(data) {
+                            if (!data) {
+                                showToast('No data received', 'error');
+                                return;
+                            }
+                            showModal('Cross-References', `
+                                <div class="space-y-4">
+                                    <div class="bg-gray-800 p-4 rounded-lg">
+                                        <div class="text-2xl font-bold text-cyan-400">${data.total_refs || 0}</div>
+                                        <div class="text-xs text-gray-400">Total References for ${address}</div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="bg-gray-800 p-4 rounded-lg">
+                                            <h4 class="text-sm font-semibold text-gray-300 mb-2">Calls To</h4>
+                                            <div class="space-y-1 max-h-48 overflow-y-auto">
+                                                ${(data.calls_to || []).map(addr => `<div class="text-xs text-gray-400 font-mono">${addr}</div>`).join('') || '<div class="text-xs text-gray-500">None</div>'}
+                                            </div>
+                                        </div>
+                                        <div class="bg-gray-800 p-4 rounded-lg">
+                                            <h4 class="text-sm font-semibold text-gray-300 mb-2">Calls From</h4>
+                                            <div class="space-y-1 max-h-48 overflow-y-auto">
+                                                ${(data.calls_from || []).map(addr => `<div class="text-xs text-gray-400 font-mono">${addr}</div>`).join('') || '<div class="text-xs text-gray-500">None</div>'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-gray-800 p-4 rounded-lg">
+                                        <h4 class="text-sm font-semibold text-gray-300 mb-2">Data References</h4>
+                                        <div class="space-y-1 max-h-48 overflow-y-auto">
+                                            ${(data.data_refs || []).map(addr => `<div class="text-xs text-gray-400 font-mono">${addr}</div>`).join('') || '<div class="text-xs text-gray-500">None</div>'}
+                                        </div>
+                                    </div>
+                                </div>
+                            `);
+                        }).fail(function() {
+                            showToast('Failed to load cross-references', 'error');
+                        });
+                    });
+                });
+
+                $('#btn-memory-compare').on('click', function () {
+                    const selectedJob = $('.job-item.border-indigo-500');
+                    const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'warning');
+                        return;
+                    }
+
+                    showModal('Compare Sections', `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-2">First Section Name</label>
+                                <input type="text" id="compare-section1-input" 
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500"
+                                    placeholder="e.g., .text">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-2">Second Section Name</label>
+                                <input type="text" id="compare-section2-input" 
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500"
+                                    placeholder="e.g., .data">
+                            </div>
+                            <button id="compare-submit-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition">
+                                Compare Sections
+                            </button>
+                        </div>
+                    `);
+
+                    $('#compare-submit-btn').on('click', function() {
+                        const section1 = $('#compare-section1-input').val();
+                        const section2 = $('#compare-section2-input').val();
+                        if (!section1 || !section2) {
+                            showToast('Please enter both section names', 'warning');
+                            return;
+                        }
+
+                        $.get(`/api/jobs/${currentJobId}/memory/compare/${section1}/${section2}`, function(data) {
+                            if (!data || !data.section1 || !data.section2 || !data.comparison) {
+                                showToast('No data received', 'error');
+                                return;
+                            }
+                            showModal('Compare Sections', `
+                                <div class="space-y-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="bg-gray-800 p-4 rounded-lg">
+                                            <h4 class="text-sm font-semibold text-gray-300 mb-2">${data.section1.name}</h4>
+                                            <div class="text-xs text-gray-400">Size: ${formatSize(data.section1.size || 0)}</div>
+                                            <div class="text-xs text-gray-400">Range: ${data.section1.start} - ${data.section1.end}</div>
+                                        </div>
+                                        <div class="bg-gray-800 p-4 rounded-lg">
+                                            <h4 class="text-sm font-semibold text-gray-300 mb-2">${data.section2.name}</h4>
+                                            <div class="text-xs text-gray-400">Size: ${formatSize(data.section2.size || 0)}</div>
+                                            <div class="text-xs text-gray-400">Range: ${data.section2.start} - ${data.section2.end}</div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-gray-800 p-4 rounded-lg">
+                                        <div class="text-2xl font-bold text-rose-400">${data.comparison.similarity_percentage || 0}%</div>
+                                        <div class="text-xs text-gray-400">Similarity</div>
+                                    </div>
+                                    <div class="bg-gray-800 p-4 rounded-lg">
+                                        <h4 class="text-sm font-semibold text-gray-300 mb-2">Differences (${data.comparison.different_bytes || 0})</h4>
+                                        <div class="space-y-1 max-h-48 overflow-y-auto">
+                                            ${(data.comparison.differences || []).map(d => `
+                                                <div class="text-xs text-gray-400 font-mono">
+                                                    Offset ${d.offset}: <span class="text-red-400">${d.section1_byte}</span> vs <span class="text-green-400">${d.section2_byte}</span>
+                                                </div>
+                                            `).join('') || '<div class="text-xs text-gray-500">No differences</div>'}
+                                        </div>
+                                    </div>
+                                </div>
+                            `);
+                        }).fail(function() {
+                            showToast('Failed to compare sections', 'error');
+                        });
+                    });
+                });
+
+                $('#btn-pattern-search').on('click', function () {
+                    const selectedJob = $('.job-item.border-indigo-500');
+                    const currentJobId = selectedJob.length ? selectedJob.data('job-id') : null;
+                    if (!currentJobId) {
+                        showToast('Please select a job first', 'warning');
+                        return;
+                    }
+
+                    showModal('Pattern Search', `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-2">Pattern</label>
+                                <input type="text" id="pattern-input" 
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500"
+                                    placeholder="e.g., 48 8B ?? or regex pattern">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-2">Pattern Type</label>
+                                <select id="pattern-type-input" 
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500">
+                                    <option value="hex">Hex</option>
+                                    <option value="regex">Regex</option>
+                                    <option value="wildcard">Wildcard (?? for unknown bytes)</option>
+                                </select>
+                            </div>
+                            <button id="pattern-submit-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition">
+                                Search Pattern
+                            </button>
+                        </div>
+                    `);
+
+                    $('#pattern-submit-btn').on('click', function() {
+                        const pattern = $('#pattern-input').val();
+                        const patternType = $('#pattern-type-input').val();
+                        if (!pattern) {
+                            showToast('Please enter a pattern', 'warning');
+                            return;
+                        }
+
+                        $.ajax({
+                            url: `/api/jobs/${currentJobId}/memory/pattern/search`,
+                            method: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify({
+                                pattern: pattern,
+                                pattern_type: patternType
+                            }),
+                            success: function(data) {
+                                if (!data || !data.matches) {
+                                    showToast('No data received', 'error');
+                                    return;
+                                }
+                                showModal('Pattern Search Results', `
+                                    <div class="space-y-4">
+                                        <div class="bg-gray-800 p-4 rounded-lg">
+                                            <div class="text-2xl font-bold text-indigo-400">${data.count || 0}</div>
+                                            <div class="text-xs text-gray-400">Matches for "${data.pattern}" (${data.pattern_type})</div>
+                                        </div>
+                                        <div class="bg-gray-800 p-4 rounded-lg max-h-96 overflow-y-auto">
+                                            <div class="space-y-2">
+                                                ${data.matches.slice(0, 100).map(m => `
+                                                    <div class="p-2 bg-gray-900 rounded text-xs">
+                                                        <div class="text-gray-400 font-mono">${m.section} @ ${m.address}</div>
+                                                        <div class="text-gray-200 font-mono">${m.matched_bytes.join(' ')}</div>
+                                                        <div class="text-gray-500 font-mono">Context: ${m.context.join(' ')}</div>
+                                                    </div>
+                                                `).join('')}
+                                                ${data.matches.length > 100 ? '<div class="text-center text-gray-500 text-xs">... and ' + (data.matches.length - 100) + ' more</div>' : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `);
+                            },
+                            error: function() {
+                                showToast('Failed to search pattern', 'error');
+                            }
+                        });
+                    });
                 });
             });
 
             $(document).ready(function () {
-                if (typeof TimelineManager !== 'undefined') {
-                    window.timelineManager = new TimelineManager();
-                }
-
-
                 $('#toggle-remote-section').on('click', function () {
                     $('#remote-content').slideToggle();
                     $('#remote-chevron').toggleClass('rotate-180');
@@ -2982,10 +3022,7 @@
     <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
     <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="{{ url_for('static', filename='js/callgraph.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/controlflow.js') }}"></script>
     <script src="{{ url_for('static', filename='js/memory.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/timeline.js') }}"></script>
     <script src="{{ url_for('static', filename='js/terminal.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='js/export.js') }}"></script>
     <script src="{{ url_for('static', filename='js/remote-collaboration.js') }}"></script>

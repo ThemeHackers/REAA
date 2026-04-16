@@ -47,20 +47,8 @@ $(document).ready(function() {
                                     <span class="text-sm text-gray-300">Chat History</span>
                                 </label>
                                 <label class="flex items-center">
-                                    <input type="checkbox" id="export-callgraph" ${savedSettings.callgraph !== false ? 'checked' : ''} class="mr-2">
-                                    <span class="text-sm text-gray-300">Call Graph</span>
-                                </label>
-                                <label class="flex items-center">
                                     <input type="checkbox" id="export-memory" ${savedSettings.memory !== false ? 'checked' : ''} class="mr-2">
                                     <span class="text-sm text-gray-300">Memory Layout</span>
-                                </label>
-                                <label class="flex items-center">
-                                    <input type="checkbox" id="export-controlflow" ${savedSettings.controlflow !== false ? 'checked' : ''} class="mr-2">
-                                    <span class="text-sm text-gray-300">Control Flow Graph</span>
-                                </label>
-                                <label class="flex items-center">
-                                    <input type="checkbox" id="export-timeline" ${savedSettings.timeline !== false ? 'checked' : ''} class="mr-2">
-                                    <span class="text-sm text-gray-300">Timeline</span>
                                 </label>
                                 <label class="flex items-center">
                                     <input type="checkbox" id="export-strings" ${savedSettings.strings !== false ? 'checked' : ''} class="mr-2">
@@ -96,10 +84,7 @@ $(document).ready(function() {
             security_findings: $('#export-security-findings').is(':checked'),
             code_structure: $('#export-code-structure').is(':checked'),
             chat_history: $('#export-chat-history').is(':checked'),
-            callgraph: $('#export-callgraph').is(':checked'),
             memory: $('#export-memory').is(':checked'),
-            controlflow: $('#export-controlflow').is(':checked'),
-            timeline: $('#export-timeline').is(':checked'),
             strings: $('#export-strings').is(':checked'),
             imports: $('#export-imports').is(':checked')
         };
@@ -112,10 +97,7 @@ $(document).ready(function() {
             security_findings: $('#export-security-findings').is(':checked'),
             code_structure: $('#export-code-structure').is(':checked'),
             chat_history: $('#export-chat-history').is(':checked'),
-            callgraph: $('#export-callgraph').is(':checked'),
             memory: $('#export-memory').is(':checked'),
-            controlflow: $('#export-controlflow').is(':checked'),
-            timeline: $('#export-timeline').is(':checked'),
             strings: $('#export-strings').is(':checked'),
             imports: $('#export-imports').is(':checked')
         };
@@ -167,13 +149,6 @@ $(document).ready(function() {
             });
         }
 
-        if (sections.callgraph) {
-            $.get(`/api/jobs/${currentJobId}/callgraph`, function(data) {
-                exportData.callgraph = data;
-                checkExportComplete();
-            }).fail(() => checkExportComplete());
-        }
-
         if (sections.memory) {
             $.get(`/api/jobs/${currentJobId}/memory`, function(data) {
                 exportData.memory = data;
@@ -191,13 +166,6 @@ $(document).ready(function() {
         if (sections.imports) {
             $.get(`/api/jobs/${currentJobId}/imports`, function(data) {
                 exportData.imports = data;
-                checkExportComplete();
-            }).fail(() => checkExportComplete());
-        }
-
-        if (sections.timeline) {
-            $.get(`/api/timeline/${currentJobId}`, function(data) {
-                exportData.timeline = data;
                 checkExportComplete();
             }).fail(() => checkExportComplete());
         }
@@ -327,7 +295,6 @@ $(document).ready(function() {
         report += `Job ID: ${currentJobId}\n`;
         report += `Generated: ${new Date().toISOString()}\n\n`;
         
-        // Handle metadata separately
         if (data.metadata) {
             report += 'METADATA\n';
             report += '--------\n';
@@ -336,7 +303,6 @@ $(document).ready(function() {
             report += `Format: ${data.metadata.format}\n\n`;
         }
         
-        // Handle structured sections
         if (data.analysis_summary) {
             report += 'ANALYSIS SUMMARY\n';
             report += '----------------\n';
@@ -368,29 +334,33 @@ $(document).ready(function() {
             report += '\n';
         }
         
-        // Handle technical sections
-        if (data.callgraph) {
-            report += 'CALL GRAPH\n';
-            report += '----------\n';
-            report += JSON.stringify(data.callgraph, null, 2) + '\n\n';
-        }
-        
-        if (data.memory) {
-            report += 'MEMORY LAYOUT\n';
-            report += '-------------\n';
-            report += JSON.stringify(data.memory, null, 2) + '\n\n';
-        }
-        
-        if (data.controlflow) {
+        if (exportSettings.technical) {
+            if (data.memory) {
+                report += 'MEMORY LAYOUT\n';
+                report += '-------------\n';
+                report += JSON.stringify(data.memory, null, 2) + '\n\n';
+            }
+            
+            if (data.controlflow) {
+                report += 'CONTROL FLOW GRAPH\n';
+                report += '------------------\n';
+                report += JSON.stringify(data.controlflow, null, 2) + '\n\n';
+            }
+            
+            if (data.strings) {
+                report += 'STRINGS\n';
+                report += '-------\n';
+                report += JSON.stringify(data.strings, null, 2) + '\n\n';
+            }
+            
+            if (data.imports) {
+                report += 'IMPORTS/EXPORTS\n';
+                report += '---------------\n';
+                report += JSON.stringify(data.imports, null, 2) + '\n\n';
+            }
             report += 'CONTROL FLOW GRAPH\n';
             report += '------------------\n';
             report += JSON.stringify(data.controlflow, null, 2) + '\n\n';
-        }
-        
-        if (data.timeline) {
-            report += 'TIMELINE\n';
-            report += '--------\n';
-            report += JSON.stringify(data.timeline, null, 2) + '\n\n';
         }
         
         if (data.strings) {

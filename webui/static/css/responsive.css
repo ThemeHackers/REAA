@@ -33,7 +33,6 @@
     }
     
     
-    #callgraph-container svg,
     #cf-graph-container svg,
     #ie-graph-container svg {
         min-height: 300px;

@@ -8,9 +8,16 @@ from pathlib import Path
 import logging
 import structlog
 from typing import Optional, Dict, Any
+import time
+import signal
 from .config import settings
 
 log = structlog.get_logger()
+
+
+class TimeoutError(Exception):
+    """Custom timeout exception for model generation"""
+    pass
 
 
 class LLMRefiner:
@@ -41,7 +48,7 @@ class LLMRefiner:
             return False
 
         try:
-            # Check if it's a local path or HuggingFace model name
+       
             is_local = Path(self.model_path).exists()
 
             if is_local:
@@ -111,48 +118,111 @@ class LLMRefiner:
     def refine_pseudo_code(
         self,
         pseudo_code: str,
-        max_new_tokens: Optional[int] = None
+        max_new_tokens: Optional[int] = None,
+        max_retries: int = 3,
+        timeout_seconds: int = 300
     ) -> Optional[str]:
         """
-        Refine Ghidra pseudo-code to readable C code
+        Refine Ghidra pseudo-code to readable C code with retry logic and timeout
 
         Args:
             pseudo_code: The pseudo-code to refine
             max_new_tokens: Maximum number of tokens to generate (uses settings if None)
+            max_retries: Maximum number of retry attempts on failure
+            timeout_seconds: Maximum time to wait for model generation
 
         Returns:
-            str: Refined code, or None if refinement failed
+            str: Refined code, or None if refinement failed after all retries
         """
         if not self._initialized:
-            log.error("LLM refiner not initialized")
+            log.error("LLM refiner not initialized, attempting to load model...")
+            if not self.load_model():
+                log.error("Failed to initialize LLM refiner after retry")
+                return None
+
+        if not pseudo_code or not pseudo_code.strip():
+            log.error("Empty pseudo-code provided")
             return None
 
-        try:
-            prompt = f"# This is the pseudo-code:\n{pseudo_code}\n# What is the source code?\n"
+        for attempt in range(max_retries):
+            try:
+                prompt = f"# This is the assembly code:\n{pseudo_code}\n# What is the source code?\n"
 
-            inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+                log.info(f"[DEBUG] Tokenizing prompt (length: {len(prompt)}), attempt {attempt + 1}/{max_retries}")
+                inputs = self.tokenizer(prompt, return_tensors="pt")
 
-          
-            tokens_limit = max_new_tokens or settings.LLM4DECOMPILE_MAX_NEW_TOKENS
+                if self.device == "cuda":
+                    inputs = inputs.to("cuda")
+                    log.info(f"[DEBUG] Moved inputs to CUDA")
+                else:
+                    log.info(f"[DEBUG] self.device: {self.device}, inputs on CPU")
 
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=tokens_limit,
-                    temperature=0.7,
-                    do_sample=True,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
+                tokens_limit = max_new_tokens or settings.LLM4DECOMPILE_MAX_NEW_TOKENS
+                log.info(f"[DEBUG] Starting model.generate with max_new_tokens: {tokens_limit}")
 
-            refined_code = self.tokenizer.decode(outputs[0][len(inputs[0]):-1])
-            refined_code = self.clean_tokens(refined_code)
+                def handler(signum, frame):
+                    raise TimeoutError("Model generation timed out")
 
-            log.info(f"Refinement successful, output length: {len(refined_code)}")
-            return refined_code
+                if hasattr(signal, 'SIGALRM'):
+                    signal.signal(signal.SIGALRM, handler)
+                    signal.alarm(timeout_seconds)
 
-        except Exception as e:
-            log.error(f"Error during refinement: {e}")
-            return None
+                try:
+                    with torch.no_grad():
+                        log.info(f"[DEBUG] Inside torch.no_grad, calling model.generate")
+                        outputs = self.model.generate(
+                            **inputs,
+                            max_new_tokens=tokens_limit,
+                            temperature=settings.LLM4DECOMPILE_TEMPERATURE,
+                            do_sample=True,
+                            repetition_penalty=settings.LLM4DECOMPILE_REPETITION_PENALTY,
+                            top_p=settings.LLM4DECOMPILE_TOP_P,
+                            top_k=settings.LLM4DECOMPILE_TOP_K,
+                            pad_token_id=self.tokenizer.eos_token_id
+                        )
+                        log.info(f"[DEBUG] model.generate completed")
+                finally:
+                    if hasattr(signal, 'SIGALRM'):
+                        signal.alarm(0)
+
+                refined_code = self.tokenizer.decode(outputs[0][len(inputs[0]):-1])
+                refined_code = self.clean_tokens(refined_code)
+
+                if not refined_code or not refined_code.strip():
+                    log.warning(f"Refinement returned empty code on attempt {attempt + 1}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt)
+                        continue
+                    else:
+                        return None
+
+                log.info(f"Refinement successful, output length: {len(refined_code)}")
+                return refined_code
+
+            except TimeoutError as e:
+                log.error(f"Timeout during refinement attempt {attempt + 1}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                else:
+                    return None
+            except torch.cuda.OutOfMemoryError as e:
+                log.error(f"CUDA out of memory during refinement attempt {attempt + 1}: {e}")
+                torch.cuda.empty_cache()
+                if attempt < max_retries - 1:
+                    time.sleep(5)
+                    continue
+                else:
+                    return None
+            except Exception as e:
+                log.error(f"Error during refinement attempt {attempt + 1}: {e}", exc_info=True)
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                else:
+                    return None
+
+        return None
     
     def refine_function_from_file(
         self, 

@@ -1,31 +1,11 @@
 $(document).ready(function() {
     const DEFAULT_PREFERENCES = {
-        callGraph: {
-            layoutAlgorithm: 'force',
-            nodeSize: 'medium',
-            showLabels: true,
-            colorScheme: 'default',
-            autoRefresh: false,
-            refreshInterval: 30000
-        },
         memoryLayout: {
             showHexViewer: true,
             hexBytesPerLine: 16,
             showMemoryMap: true,
             showStackHeap: true,
             autoScroll: false
-        },
-        controlFlow: {
-            layoutAlgorithm: 'force',
-            showInstructions: true,
-            syntaxHighlighting: true,
-            showCrossReferences: false
-        },
-        timeline: {
-            viewType: 'gantt',
-            showDependencies: false,
-            autoScroll: true,
-            showRealtime: true
         },
         ui: {
             theme: 'dark',
@@ -67,7 +47,7 @@ $(document).ready(function() {
         }
         
         deepMerge(merged, saved);
-        return mergedPreferences;
+        return merged;
     }
 
     function savePreferences() {
@@ -97,7 +77,7 @@ $(document).ready(function() {
     }
 
     function applyPreferences() {
-        // Apply UI preferences
+      
         if (userPreferences.ui.theme === 'light') {
             document.body.classList.add('light-theme');
         }
@@ -106,19 +86,7 @@ $(document).ready(function() {
             $('.sidebar').addClass('collapsed');
         }
 
-        // Apply tool-specific preferences
-        applyCallGraphPreferences();
         applyMemoryPreferences();
-        applyControlFlowPreferences();
-        applyTimelinePreferences();
-    }
-
-    function applyCallGraphPreferences() {
-        const prefs = userPreferences.callGraph;
-        
-        if ($('#graph-layout-algorithm').length) {
-            $('#graph-layout-algorithm').val(prefs.layoutAlgorithm);
-        }
     }
 
     function applyMemoryPreferences() {
@@ -129,56 +97,13 @@ $(document).ready(function() {
         }
     }
 
-    function applyControlFlowPreferences() {
-        const prefs = userPreferences.controlFlow;
-        
-        if ($('#cf-layout-algorithm').length) {
-            $('#cf-layout-algorithm').val(prefs.layoutAlgorithm);
-        }
-        
-        if (!prefs.showInstructions) {
-            $('.cf-instruction-view').addClass('hidden');
-        }
-    }
-
-    function applyTimelinePreferences() {
-        const prefs = userPreferences.timeline;
-        
-        if ($('#timeline-view-type').length) {
-            $('#timeline-view-type').val(prefs.viewType);
-        }
-    }
-
     function setupPreferenceListeners() {
-        // Call Graph preferences
-        $('#graph-layout-algorithm').on('change', function() {
-            setPreference('callGraph.layoutAlgorithm', $(this).val());
-        });
-
-        // Memory Layout preferences
         $('#hex-toggle').on('click', function() {
             const show = !$('.hex-viewer').hasClass('hidden');
             setPreference('memoryLayout.showHexViewer', !show);
             $('.hex-viewer').toggleClass('hidden');
         });
 
-        // Control Flow preferences
-        $('#cf-layout-algorithm').on('change', function() {
-            setPreference('controlFlow.layoutAlgorithm', $(this).val());
-        });
-
-        $('#cf-toggle-instructions').on('click', function() {
-            const show = !$('.cf-instruction-view').hasClass('hidden');
-            setPreference('controlFlow.showInstructions', !show);
-            $('.cf-instruction-view').toggleClass('hidden');
-        });
-
-        // Timeline preferences
-        $('#timeline-view-type').on('change', function() {
-            setPreference('timeline.viewType', $(this).val());
-        });
-
-        // UI preferences
         $('#theme-toggle').on('click', function() {
             const currentTheme = getPreference('ui.theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -225,11 +150,9 @@ $(document).ready(function() {
         reader.readAsText(file);
     }
 
-    // Initialize
     loadPreferences();
     setupPreferenceListeners();
 
-    // Export to global scope
     window.preferencesManager = {
         get: getPreference,
         set: setPreference,

@@ -11,20 +11,21 @@ class RemoteCollaborationManager {
         this.serverStatusInterval = null;
         this.jobSyncInterval = null;
         this.updateRemoteJobsListDebounce = null;
-        
-       
+
+
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
         this.reconnectDelay = 1000;
         this.reconnectTimeout = null;
         this.authErrorOccurred = false;
-        
+
 
         this.latency = 0;
         this.latencyHistory = [];
         this.latencyCheckInterval = null;
         this.pingStartTime = null;
-        
+        this.roomUsersSyncInterval = null;
+
         this.initializeEventListeners();
         this.loadSavedSettings();
     }
@@ -269,7 +270,6 @@ class RemoteCollaborationManager {
     }
     
     async connectAsClient(serverUrl, username, apiKey) {
-        // console.log('[Remote] Connecting as client to:', serverUrl, 'username:', username);
 
         this.authErrorOccurred = false;
         try {
@@ -283,13 +283,20 @@ class RemoteCollaborationManager {
             if (cleanUrl.includes('https://') && cleanUrl.includes('wss://')) {
                 cleanUrl = cleanUrl.replace('wss://', '');
             }
+
+         
+            if (cleanUrl.includes(':8000') || cleanUrl.includes('127.0.0.1:8000') || cleanUrl.includes('localhost:8000')) {
+                this.showToast('Cannot connect to port 8000 - that is the FastAPI backend. Socket.IO runs on port 5000 (the web UI). Please use http://127.0.0.1:5000 or the correct remote server URL.', 'error');
+                this.isConnected = false;
+                this.updateConnectionStatus(false);
+                return;
+            }
             
             this.remoteSocket = io(cleanUrl, {
                 transports: ['polling']
             });
             
             this.remoteSocket.on('connect', () => {
-                // console.log('[Remote] Socket connected');
                 this.isConnected = true;
                 this.serverConnectedClients = 0;
         
@@ -319,7 +326,6 @@ class RemoteCollaborationManager {
             });
             
             this.remoteSocket.on('disconnect', () => {
-                // console.log('[Remote] Socket disconnected');
                 this.isConnected = false;
                 this.updateConnectionStatus(false);
                 this.saveConnectionStatus('disconnected');
@@ -332,7 +338,6 @@ class RemoteCollaborationManager {
             });
             
             this.remoteSocket.on('auth_success', (data) => {
-                // console.log('[Remote] Auth success, user_id:', data.user_id);
                 this.currentUser = data.user_id;
                 this.saveConnectionStatus('connected');
             });
@@ -359,13 +364,12 @@ class RemoteCollaborationManager {
             });
             
             this.remoteSocket.on('job_list', (data) => {
-                // console.log('[Remote] Job list received:', data.jobs?.length, 'jobs');
+                console.log('[Remote] Job list received:', data.jobs?.length, 'jobs');
                 this.updateRemoteJobsList(data.jobs);
             });
             
             this.remoteSocket.on('room_users', (data) => {
-                // console.log('[Remote] Received room_users event:', data);
-                this.handleRoomUsers(data);
+                this.updateRoomUsersList(data);
             });
             
             this.remoteSocket.on('user_joined', (data) => {
@@ -395,21 +399,20 @@ class RemoteCollaborationManager {
                     if (this.latencyHistory.length > 10) {
                         this.latencyHistory.shift();
                     }
-                    // console.log('[Remote] Latency:', this.latency, 'ms');
                     this.updateConnectionQuality();
                     this.pingStartTime = null;
                 }
             });
             
             this.startJobSync();
-            
+            this.startRoomUsersSync();
+
         } catch (error) {
             this.showToast('Failed to connect: ' + error.message, 'error');
         }
     }
     
     async startAsServer() {
-        // console.log('[Remote] Starting server mode');
         this.connectionMode = 'server';
         this.isConnected = true;
         this.updateConnectionStatus(true);
@@ -535,23 +538,26 @@ class RemoteCollaborationManager {
     }
     
     disconnectFromRemote() {
- 
+
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);
             this.reconnectTimeout = null;
         }
         this.reconnectAttempts = 0;
-        
+
         if (this.remoteSocket) {
             this.remoteSocket.disconnect();
             this.remoteSocket = null;
         }
-        
+
         this.isConnected = false;
         this.currentRoom = null;
+        this.connectedUsers.clear(); 
+        this.remoteJobs.clear();
         this.stopServerStatusPolling();
         this.stopJobSync();
         this.stopLatencyCheck();
+        this.stopRoomUsersSync();
         this.saveConnectionStatus('disconnected');
         this.updateConnectionStatus(false);
     }
@@ -579,11 +585,10 @@ class RemoteCollaborationManager {
     }
     
     startLatencyCheck() {
-        // console.log('[Remote] Starting latency check');
         if (this.latencyCheckInterval) {
             clearInterval(this.latencyCheckInterval);
         }
-        
+
         this.latencyCheckInterval = setInterval(() => {
             if (this.isConnected && this.remoteSocket) {
                 this.pingStartTime = Date.now();
@@ -591,9 +596,8 @@ class RemoteCollaborationManager {
             }
         }, 5000);
     }
-    
+
     stopLatencyCheck() {
-        // console.log('[Remote] Stopping latency check');
         if (this.latencyCheckInterval) {
             clearInterval(this.latencyCheckInterval);
             this.latencyCheckInterval = null;
@@ -601,6 +605,41 @@ class RemoteCollaborationManager {
         this.latency = 0;
         this.latencyHistory = [];
         this.updateConnectionQuality();
+    }
+
+    startRoomUsersSync() {
+        if (this.roomUsersSyncInterval) {
+            clearInterval(this.roomUsersSyncInterval);
+        }
+
+        this.roomUsersSyncInterval = setInterval(() => {
+            if (this.isConnected && this.currentRoom && this.remoteSocket) {
+                this.syncRoomUsers();
+            }
+        }, 10000);
+    }
+
+    stopRoomUsersSync() {
+        if (this.roomUsersSyncInterval) {
+            clearInterval(this.roomUsersSyncInterval);
+            this.roomUsersSyncInterval = null;
+        }
+    }
+
+    async syncRoomUsers() {
+        if (!this.currentRoom) return;
+
+        try {
+            const response = await fetch(`/api/remote/room/${this.currentRoom}/users`);
+            if (response.ok) {
+                const data = await response.json();
+                const users = data.users || [];
+                this.connectedUsers.set(this.currentRoom, new Set(users.map(u => u.user_id)));
+                this.updateConnectedUsersList(users);
+            }
+        } catch (error) {
+            console.error('[Remote] Error syncing room users:', error);
+        }
     }
     
     updateConnectionQuality() {
@@ -640,7 +679,6 @@ class RemoteCollaborationManager {
     }
     
     updateConnectedUsersList(users) {
-        // console.log('[Remote] Updating connected users list:', users?.length, 'users');
         const container = $('#connected-users-list');
         container.empty();
         
@@ -704,27 +742,37 @@ class RemoteCollaborationManager {
     }
     
     handleRoomUsers(data) {
-        // console.log('handleRoomUsers received:', data);
         const { job_id, users } = data;
+
         this.connectedUsers.set(job_id, new Set(users.map(u => u.user_id)));
         this.updateRemoteJobsList(this.remoteJobs.get('all') || []);
-        this.updateConnectedUsersList(users);
+
+        if (this.currentRoom === job_id) {
+            this.updateConnectedUsersList(users);
+        }
     }
     
     updateRemoteJobsList(jobs) {
         if (this.updateRemoteJobsListDebounce) {
             clearTimeout(this.updateRemoteJobsListDebounce);
         }
-        
+
         this.updateRemoteJobsListDebounce = setTimeout(() => {
-            // console.log('[Remote] updateRemoteJobsList called with:', jobs?.length, 'jobs', 'full jobs:', jobs);
             const container = $('#remote-jobs-list');
-            // console.log('[Remote] Container found:', container.length);
             container.empty();
-        
+
+
+            if (!jobs || !Array.isArray(jobs)) {
+                if (this.connectionMode === 'server') {
+                    container.html('<div class="text-center py-4 text-xs text-gray-500">No local jobs available for sharing</div>');
+                } else {
+                    container.html('<div class="text-center py-4 text-xs text-gray-500">No remote jobs available</div>');
+                }
+                return;
+            }
 
             this.remoteJobs.set('all', jobs);
-            
+
             if (jobs.length === 0) {
                 if (this.connectionMode === 'server') {
                     container.html('<div class="text-center py-4 text-xs text-gray-500">No local jobs available for sharing</div>');
@@ -734,23 +782,25 @@ class RemoteCollaborationManager {
                 return;
             }
             
-            // console.log('[Remote] Starting to render jobs, count:', jobs.length);
             jobs.forEach(job => {
-                // console.log('[Remote] Rendering job:', job.filename);
-                const usersCount = job.connected_users || this.connectedUsers.get(job.job_id)?.size || 0;
+                
+                const usersCount = job.connected_users || 0;
                 const modeLabel = this.connectionMode === 'server' ? 'LOCAL' : 'REMOTE';
                 const modeColor = this.connectionMode === 'server' ? 'bg-green-600' : 'bg-blue-600';
-                
+                const filename = job.filename || job.file_name || 'Unknown';
+                const status = job.status || 'unknown';
+                const jobId = job.job_id || job.id || 'unknown';
+
                 const jobHtml = `
                     <div class="job-item p-3 bg-gray-800 rounded-lg border border-gray-700 hover:border-${this.connectionMode === 'server' ? 'green' : 'blue'}-500 transition cursor-pointer mb-2"
-                         data-job-id="${job.job_id}"
+                         data-job-id="${jobId}"
                          data-remote="${this.connectionMode !== 'server'}">
                         <div class="flex items-center justify-between mb-1">
-                            <span class="text-sm text-gray-300 font-mono truncate">${job.filename}</span>
+                            <span class="text-sm text-gray-300 font-mono truncate">${filename}</span>
                             <span class="px-2 py-1 ${modeColor} text-white rounded text-xs">${modeLabel}</span>
                         </div>
                         <div class="flex items-center justify-between">
-                            <div class="text-xs text-gray-500">Status: ${job.status}</div>
+                            <div class="text-xs text-gray-500">Status: ${status}</div>
                             <div class="text-xs text-gray-500 flex items-center">
                                 <svg class="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7 a4 4 0 11-8 0 4 4 0 018 0z"></path>
@@ -761,7 +811,6 @@ class RemoteCollaborationManager {
                     </div>
                 `;
                 container.append(jobHtml);
-                // console.log('[Remote] Appended job HTML for:', job.filename);
             });
             
             if (this.connectionMode === 'client') {
@@ -775,31 +824,51 @@ class RemoteCollaborationManager {
         }, 100);
     }
     
-    joinRemoteJob(jobId) {
-        // console.log('[Remote] Joining remote job:', jobId, 'mode:', this.connectionMode, 'isConnected:', this.isConnected, 'remoteSocket:', !!this.remoteSocket);
+    async joinRemoteJob(jobId) {
+        console.log('[Remote] Joining remote job:', jobId, 'mode:', this.connectionMode, 'isConnected:', this.isConnected, 'remoteSocket:', !!this.remoteSocket);
         if (this.connectionMode === 'server') {
             this.loadJobInUI(jobId);
             this.showToast('Loaded local job', 'success');
             return;
         }
-        
+
         if (!this.isConnected || !this.remoteSocket) {
             console.error('[Remote] Cannot join - not connected', 'isConnected:', this.isConnected, 'remoteSocket:', !!this.remoteSocket);
             this.showToast('Not connected to remote server', 'error');
             return;
         }
-        
+
+        if (this.currentRoom && this.currentRoom !== jobId) {
+            this.remoteSocket.emit('leave_room', {
+                job_id: this.currentRoom,
+                user_id: this.currentUser
+            });
+            this.connectedUsers.delete(this.currentRoom);
+        }
+
         this.currentRoom = jobId;
-        
-        // console.log('[Remote] Emitting join_room with:', { job_id: jobId, user_id: this.currentUser });
+
         this.remoteSocket.emit('join_room', {
             job_id: jobId,
             user_id: this.currentUser,
             username: this.username || 'Anonymous'
         });
+
         
+        try {
+            const response = await fetch(`/api/remote/room/${jobId}/users`);
+            if (response.ok) {
+                const data = await response.json();
+                const users = data.users || [];
+                this.connectedUsers.set(jobId, new Set(users.map(u => u.user_id)));
+                this.updateConnectedUsersList(users);
+            }
+        } catch (error) {
+            console.error('[Remote] Error fetching room users:', error);
+        }
+
         this.loadJobInUI(jobId);
-        
+
         this.showToast('Joined remote job', 'success');
     }
     
@@ -823,32 +892,48 @@ class RemoteCollaborationManager {
         this.currentRoom = null;
     }
     
-    handleUserJoined(message) {
-        // console.log('[Remote] User joined:', message.username, 'job:', message.job_id);
+    async handleUserJoined(message) {
         if (!this.connectedUsers.has(message.job_id)) {
             this.connectedUsers.set(message.job_id, new Set());
         }
         this.connectedUsers.get(message.job_id).add(message.user_id);
         this.updateRemoteJobsList(message.available_jobs || []);
-        
-        if (message.available_users) {
-            this.updateConnectedUsersList(message.available_users);
+
+      
+        if (this.currentRoom === message.job_id) {
+            try {
+                const response = await fetch(`/api/remote/room/${message.job_id}/users`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.updateConnectedUsersList(data.users || []);
+                }
+            } catch (error) {
+                console.error('[Remote] Error fetching room users after user joined:', error);
+            }
         }
-        
+
         this.showToast(`${message.username} joined the session`, 'info');
     }
     
-    handleUserLeft(message) {
-        // console.log('[Remote] User left:', message.username, 'job:', message.job_id);
+    async handleUserLeft(message) {
         if (this.connectedUsers.has(message.job_id)) {
             this.connectedUsers.get(message.job_id).delete(message.user_id);
         }
         this.updateRemoteJobsList(message.available_jobs || []);
-        
-        if (message.available_users) {
-            this.updateConnectedUsersList(message.available_users);
+
+      
+        if (this.currentRoom === message.job_id) {
+            try {
+                const response = await fetch(`/api/remote/room/${message.job_id}/users`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.updateConnectedUsersList(data.users || []);
+                }
+            } catch (error) {
+                console.error('[Remote] Error fetching room users after user left:', error);
+            }
         }
-        
+
         this.showToast(`${message.username} left the session`, 'info');
     }
     
@@ -890,7 +975,6 @@ class RemoteCollaborationManager {
     }
     
     updateConnectionStatus(connected) {
-        // console.log('[Remote] updateConnectionStatus called with:', connected, 'mode:', this.connectionMode);
         const disconnectBtn = $('#disconnect-remote');
         const connectionIndicator = $('#connection-indicator');
         const connectionIndicatorModal = $('#connection-indicator-modal');
