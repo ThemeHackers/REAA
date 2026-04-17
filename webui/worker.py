@@ -10,6 +10,10 @@ import datetime
 import redis
 from rq import Worker, Queue, Connection
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.panel import Panel
+
+console = Console()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -132,8 +136,11 @@ def graph_generation_task(job_id):
             raise e
 
 if __name__ == '__main__':
-    print(f"Starting worker on {redis_url}")
-    print(f"Listening to queues: {', '.join(queues)}")
+    console.print(Panel(
+        f"[bold cyan]Starting worker[/bold cyan]\n[blue]Redis URL:[/blue] {redis_url}\n[green]Queues:[/green] {', '.join(queues)}",
+        title="[bold]REAA Worker[/bold]",
+        border_style="cyan"
+    ))
     
     with Connection(redis_conn):
         worker = Worker(queues)

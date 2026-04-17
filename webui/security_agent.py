@@ -4,6 +4,10 @@ import requests
 import re
 from typing import Dict, Any, Generator, List
 from openai import OpenAI
+from rich.console import Console
+
+console = Console()
+
 from model import model_manager
 
 GHIDRA_API_BASE = "http://127.0.0.1:8000"
@@ -216,7 +220,7 @@ class SecurityAgent:
             try:
                 os.makedirs(self.security_dir)
             except OSError as e:
-                print(f"Error creating security directory: {e}")
+                console.print(f"[red]Error creating security directory: {e}[/red]")
                 self.security_dir = None
 
     def _get_security_file(self, job_id: str) -> str:
@@ -229,7 +233,7 @@ class SecurityAgent:
                 with open(security_file, 'r') as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Error loading security history: {e}")
+                console.print(f"[red]Error loading security history: {e}[/red]")
         return []
 
     def save_security_analysis(self, job_id: str, analysis: dict):
@@ -245,7 +249,7 @@ class SecurityAgent:
                 os.remove(security_file)
                 return True
             except IOError as e:
-                print(f"Error clearing security history: {e}")
+                console.print(f"[red]Error clearing security history: {e}[/red]")
                 return False
         return True
 
@@ -493,7 +497,7 @@ class SecurityAgent:
                         try:
                             args = json.loads(tool_call.function.arguments)
                         except json.JSONDecodeError as e:
-                            print(f"JSON parsing error: {e}")
+                            console.print(f"[red]JSON parsing error: {e}[/red]")
                             args = {}
 
                         args['job_id'] = job_id

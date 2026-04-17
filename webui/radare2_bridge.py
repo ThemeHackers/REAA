@@ -8,6 +8,9 @@ import tempfile
 import shutil
 import sys
 from typing import Optional, Dict, List, Any
+from rich.console import Console
+
+console = Console()
 
 
 class Radare2Bridge:
@@ -17,26 +20,26 @@ class Radare2Bridge:
         if r2_path:
             self.r2_path = r2_path
             if os.path.exists(r2_path):
-                print(f"Using custom radare2 path: {r2_path}")
+                console.print(f"[cyan]Using custom radare2 path: {r2_path}[/cyan]")
             else:
-                print(f"Using provided radare2 path (may not exist): {r2_path}")
+                console.print(f"[yellow]Using provided radare2 path (may not exist): {r2_path}[/yellow]")
         elif sys.platform == 'win32':
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             r2_bat_path = os.path.join(project_root, 'radare2-6.1.2-w64', 'bin', 'r2.bat')
             r2_exe_path = os.path.join(project_root, 'radare2-6.1.2-w64', 'bin', 'r2.exe')
-            
+
             if os.path.exists(r2_bat_path):
                 self.r2_path = r2_bat_path
-                print(f"Using project radare2 (r2.bat): {r2_bat_path}")
+                console.print(f"[cyan]Using project radare2 (r2.bat): {r2_bat_path}[/cyan]")
             elif os.path.exists(r2_exe_path):
                 self.r2_path = r2_exe_path
-                print(f"Using project radare2 (r2.exe): {r2_exe_path}")
+                console.print(f"[cyan]Using project radare2 (r2.exe): {r2_exe_path}[/cyan]")
             else:
                 self.r2_path = "r2"
-                print("Using system radare2 from PATH")
+                console.print("[cyan][OK] Using system radare2 from PATH[/cyan]")
         else:
             self.r2_path = "r2"
-            print("Using system radare2 from PATH")
+            console.print("[cyan][OK] Using system radare2 from PATH[/cyan]")
         
         self.current_file = None
         self.temp_dir = None

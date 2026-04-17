@@ -31,6 +31,16 @@ class OrchestratorAgent:
         self.pending_approvals: List[Dict[str, Any]] = []
         self.active_tasks: Dict[str, Dict[str, Any]] = {}
         self.task_history: List[Dict[str, Any]] = []
+        self.strategy_performance: Dict[str, Dict[str, Any]] = {
+            "static": {"success_count": 0, "total_count": 0, "avg_time": 0},
+            "dynamic": {"success_count": 0, "total_count": 0, "avg_time": 0},
+            "hybrid": {"success_count": 0, "total_count": 0, "avg_time": 0}
+        }
+        self.user_preferences: Dict[str, Any] = {
+            "preferred_mode": None,
+            "risk_tolerance": "medium",
+            "analysis_depth": "standard"
+        }
 
     def initialize_agents(self, ghidra_api_base: str):
         """Initialize the static analysis agents"""
@@ -133,6 +143,9 @@ class OrchestratorAgent:
 
             self.task_history.append(task)
             del self.active_tasks[job_id]
+
+           
+            self.learn_from_task(task)
 
             return task
 
@@ -292,6 +305,111 @@ class OrchestratorAgent:
             return True
 
         return False
+
+    def learn_from_task(self, task: Dict[str, Any]) -> None:
+        """Learn from completed task to improve future strategy decisions"""
+        strategy_mode = task.get("strategy", {}).get("mode", "static")
+        status = task.get("status", "failed")
+        
+        perf = self.strategy_performance[strategy_mode]
+        perf["total_count"] += 1
+        
+        if status == "completed":
+            perf["success_count"] += 1
+        
+   
+        if "completed_at" in task and "started_at" in task:
+            start = datetime.fromisoformat(task["started_at"])
+            end = datetime.fromisoformat(task["completed_at"])
+            duration = (end - start).total_seconds()
+            
+          
+            perf["avg_time"] = (perf["avg_time"] * (perf["total_count"] - 1) + duration) / perf["total_count"]
+        
+        log.info(f"Updated performance metrics for {strategy_mode} strategy")
+
+    def get_adaptive_strategy(self, binary_path: str, user_request: str, binary_type: str = None) -> Dict[str, Any]:
+        """Get adaptive strategy based on learned performance and user preferences"""
+        base_strategy = self.decide_analysis_strategy(binary_path, user_request, binary_type)
+        
+        if "error" in base_strategy:
+            return base_strategy
+
+      
+        if self.user_preferences["preferred_mode"]:
+            base_strategy["mode"] = AnalysisMode(self.user_preferences["preferred_mode"])
+            base_strategy["reasoning"] += f" (user prefers {self.user_preferences['preferred_mode']} mode)"
+
+       
+        if self.user_preferences["risk_tolerance"] == "low":
+           
+            if base_strategy["mode"] in [AnalysisMode.DYNAMIC, AnalysisMode.HYBRID]:
+                base_strategy["mode"] = AnalysisMode.STATIC
+                base_strategy["reasoning"] += " (low risk tolerance preference)"
+        elif self.user_preferences["risk_tolerance"] == "high":
+          
+            if base_strategy["mode"] == AnalysisMode.STATIC:
+                base_strategy["mode"] = AnalysisMode.HYBRID
+                base_strategy["reasoning"] += " (high risk tolerance preference)"
+
+       
+        for mode in ["static", "dynamic", "hybrid"]:
+            perf = self.strategy_performance[mode]
+            if perf["total_count"] > 5 and perf["success_count"] / perf["total_count"] < 0.5:
+               
+                if base_strategy["mode"].value == mode:
+                    if mode == "dynamic":
+                        base_strategy["mode"] = AnalysisMode.STATIC
+                        base_strategy["reasoning"] += " (dynamic has low success rate)"
+                    elif mode == "static":
+                        base_strategy["mode"] = AnalysisMode.HYBRID
+                        base_strategy["reasoning"] += " (static has low success rate)"
+
+        return base_strategy
+
+    def set_user_preference(self, preference: str, value: Any) -> bool:
+        """Set user preference for strategy selection"""
+        if preference in self.user_preferences:
+            self.user_preferences[preference] = value
+            log.info(f"Set user preference {preference} to {value}")
+            return True
+        else:
+            log.warning(f"Unknown preference: {preference}")
+            return False
+
+    def get_performance_metrics(self) -> Dict[str, Dict[str, Any]]:
+        """Get performance metrics for all strategies"""
+        return self.strategy_performance.copy()
+
+    def get_learning_summary(self) -> Dict[str, Any]:
+        """Get summary of learned patterns and performance"""
+        summary = {
+            "total_tasks": len(self.task_history),
+            "strategy_performance": self.strategy_performance,
+            "user_preferences": self.user_preferences,
+            "recommendations": []
+        }
+
+       
+        for mode, perf in self.strategy_performance.items():
+            if perf["total_count"] > 5:
+                success_rate = perf["success_count"] / perf["total_count"]
+                if success_rate < 0.5:
+                    summary["recommendations"].append({
+                        "type": "low_success_rate",
+                        "strategy": mode,
+                        "success_rate": success_rate,
+                        "suggestion": f"Consider using alternative strategies instead of {mode}"
+                    })
+                elif success_rate > 0.8:
+                    summary["recommendations"].append({
+                        "type": "high_success_rate",
+                        "strategy": mode,
+                        "success_rate": success_rate,
+                        "suggestion": f"{mode} strategy is performing well, consider using it more often"
+                    })
+
+        return summary
 
 
 _orchestrator_agent_instance: Optional[OrchestratorAgent] = None

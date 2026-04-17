@@ -3,10 +3,6 @@ import json
 from typing import Dict, Any, List, Optional
 from openai import OpenAI
 
-from webui.active_re_agent import get_active_re_agent
-from webui.orchestrator_agent import get_orchestrator_agent
-from webui.report_agent import get_report_agent
-
 
 class ModelManager:
     """Manager for AI model operations and configuration"""
@@ -23,6 +19,11 @@ class ModelManager:
             os.makedirs(self.models_dir)
 
         self.current_config = self.load_model_config()
+
+       
+        from webui.active_re_agent import get_active_re_agent
+        from webui.orchestrator_agent import get_orchestrator_agent
+        from webui.report_agent import get_report_agent
 
         self.active_re_agent = get_active_re_agent()
         self.orchestrator_agent = get_orchestrator_agent()
@@ -192,4 +193,20 @@ class ModelManager:
         return self.report_agent
 
 
-model_manager = ModelManager()
+
+_model_manager_instance = None
+
+def get_model_manager():
+    """Get the singleton ModelManager instance"""
+    global _model_manager_instance
+    if _model_manager_instance is None:
+        _model_manager_instance = ModelManager()
+    return _model_manager_instance
+
+
+class _ModelManagerProxy:
+    """Proxy for lazy model manager initialization"""
+    def __getattr__(self, name):
+        return getattr(get_model_manager(), name)
+
+model_manager = _ModelManagerProxy()

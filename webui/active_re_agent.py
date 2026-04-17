@@ -2,7 +2,9 @@ import os
 import json
 import logging
 import structlog
-from typing import Optional, Dict, Any, List
+import uuid
+import concurrent.futures
+from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 
 from core.config import settings
@@ -33,6 +35,9 @@ class ActiveREAgent:
         self.llm_client = self._init_llm_client()
         self.chat_history: List[Dict[str, Any]] = []
         self.current_job_id = None
+        self.job_state: Dict[str, Dict[str, Any]] = {}
+        self.enable_parallel = True
+        self.max_parallel_tasks = 4
 
     def _init_llm_client(self) -> Optional[LLMClient]:
         """Initialize LLM client for analysis"""
@@ -91,8 +96,8 @@ class ActiveREAgent:
             return {"error": "Frida not available"}
 
         try:
-            job_id = datetime.utcnow().timestamp()
-            self.active_re_service.start_analysis(str(job_id), binary_path)
+            job_id = uuid.uuid4().hex
+            self.active_re_service.start_analysis(job_id, binary_path)
 
             if script_content:
                 self.frida.load_script(script_content)
@@ -261,6 +266,131 @@ Please provide analysis based on the context above."""
     def get_current_job(self) -> Optional[str]:
         """Get the current job ID"""
         return self.current_job_id
+
+    def execute_parallel_tasks(self, tasks: List[Callable]) -> Dict[str, Any]:
+        """Execute multiple analysis tasks in parallel"""
+        if not self.enable_parallel:
+      
+            results = {}
+            for task in tasks:
+                try:
+                    results[task.__name__] = task()
+                except Exception as e:
+                    results[task.__name__] = {"error": str(e)}
+            return results
+
+        results = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel_tasks) as executor:
+            future_to_task = {executor.submit(task): task for task in tasks}
+            
+            for future in concurrent.futures.as_completed(future_to_task):
+                task = future_to_task[future]
+                try:
+                    results[task.__name__] = future.result()
+                except Exception as e:
+                    log.error(f"Parallel task {task.__name__} failed: {e}", exc_info=True)
+                    results[task.__name__] = {"error": str(e)}
+
+        return results
+
+    def aggregate_monitoring_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Aggregate results from multiple monitoring sources"""
+        aggregated = {
+            "process": {"alerts": [], "events": []},
+            "memory": {"anomalies": [], "patterns": {}},
+            "network": {"threats": [], "connections": []},
+            "filesystem": {"events": [], "quarantined": []},
+            "summary": {
+                "total_alerts": 0,
+                "total_anomalies": 0,
+                "total_threats": 0,
+                "high_risk_count": 0
+            }
+        }
+
+        for result in results:
+        
+            if "process" in result:
+                if "alerts" in result["process"]:
+                    aggregated["process"]["alerts"].extend(result["process"]["alerts"])
+                if "events" in result["process"]:
+                    aggregated["process"]["events"].extend(result["process"]["events"])
+
+         
+            if "memory" in result:
+                if "anomalies" in result["memory"]:
+                    aggregated["memory"]["anomalies"].extend(result["memory"]["anomalies"])
+                if "patterns" in result["memory"]:
+                    aggregated["memory"]["patterns"].update(result["memory"]["patterns"])
+
+           
+            if "network" in result:
+                if "threats" in result["network"]:
+                    aggregated["network"]["threats"].extend(result["network"]["threats"])
+                if "connections" in result["network"]:
+                    aggregated["network"]["connections"].extend(result["network"]["connections"])
+
+           
+            if "filesystem" in result:
+                if "events" in result["filesystem"]:
+                    aggregated["filesystem"]["events"].extend(result["filesystem"]["events"])
+                if "quarantined" in result["filesystem"]:
+                    aggregated["filesystem"]["quarantined"].extend(result["filesystem"]["quarantined"])
+
+       
+        aggregated["summary"]["total_alerts"] = len(aggregated["process"]["alerts"])
+        aggregated["summary"]["total_anomalies"] = len(aggregated["memory"]["anomalies"])
+        aggregated["summary"]["total_threats"] = len(aggregated["network"]["threats"])
+        
+       
+        for alert in aggregated["process"]["alerts"]:
+            if alert.get("type") in ["cpu_high", "memory_high"]:
+                aggregated["summary"]["high_risk_count"] += 1
+        for threat in aggregated["network"]["threats"]:
+            if threat.get("type") in ["c2_domain", "suspicious_port"]:
+                aggregated["summary"]["high_risk_count"] += 1
+
+        return aggregated
+
+    def run_comprehensive_analysis(self, binary_path: str, analysis_goal: str) -> Dict[str, Any]:
+        """Run comprehensive analysis with parallel execution and result aggregation"""
+        plan = self.plan_execution_strategy(binary_path, analysis_goal)
+        
+        if "error" in plan:
+            return plan
+
+        tasks = []
+
+      
+        if "frida" in plan.get("tools_to_use", []):
+            tasks.append(lambda: self.execute_with_frida(binary_path))
+        
+        if "angr" in plan.get("tools_to_use", []):
+            tasks.append(lambda: self.analyze_with_angr(binary_path))
+        
+        if "monitoring" in plan.get("tools_to_use", []):
+            def run_monitoring():
+                job_id = uuid.uuid4().hex
+                return self.monitor_execution(job_id)
+            tasks.append(run_monitoring)
+
+       
+        parallel_results = self.execute_parallel_tasks(tasks)
+
+      
+        monitoring_results = []
+        for task_name, result in parallel_results.items():
+            if "monitor" in task_name and "error" not in result:
+                monitoring_results.append(result)
+
+        aggregated = self.aggregate_monitoring_results(monitoring_results)
+
+        return {
+            "plan": plan,
+            "parallel_results": parallel_results,
+            "aggregated_monitoring": aggregated,
+            "overall_risk": aggregated["summary"]["high_risk_count"] > 0
+        }
 
 
 _active_re_agent_instance: Optional[ActiveREAgent] = None
