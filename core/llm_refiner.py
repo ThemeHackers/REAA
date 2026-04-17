@@ -5,6 +5,7 @@ Uses llm4decompile model to refine Ghidra pseudo-code
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from pathlib import Path
+import ast
 import logging
 import structlog
 from typing import Optional, Dict, Any
@@ -86,11 +87,17 @@ class LLMRefiner:
 
        
             if settings.LLM4DECOMPILE_MAX_MEMORY:
-                model_kwargs["max_memory"] = eval(settings.LLM4DECOMPILE_MAX_MEMORY)
+                model_kwargs["max_memory"] = self._safe_parse_dict_config(
+                    settings.LLM4DECOMPILE_MAX_MEMORY,
+                    "LLM4DECOMPILE_MAX_MEMORY"
+                )
 
            
             if settings.LLM4DECOMPILE_QUANTIZATION:
-                model_kwargs["quantization_config"] = eval(settings.LLM4DECOMPILE_QUANTIZATION)
+                model_kwargs["quantization_config"] = self._safe_parse_dict_config(
+                    settings.LLM4DECOMPILE_QUANTIZATION,
+                    "LLM4DECOMPILE_QUANTIZATION"
+                )
 
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
             self.model = AutoModelForCausalLM.from_pretrained(
@@ -106,6 +113,17 @@ class LLMRefiner:
             log.error(f"Failed to load LLM refiner: {e}")
             self._initialized = False
             return False
+
+    def _safe_parse_dict_config(self, raw_value: str, setting_name: str) -> Dict[str, Any]:
+        """Safely parse dict-like settings without code execution."""
+        try:
+            parsed = ast.literal_eval(raw_value)
+        except (SyntaxError, ValueError) as exc:
+            raise ValueError(f"{setting_name} must be a valid Python literal dict") from exc
+
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{setting_name} must be a dict")
+        return parsed
     
     def clean_tokens(self, text: str) -> str:
         """Clean special tokens from model output"""
