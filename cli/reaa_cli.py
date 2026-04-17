@@ -29,7 +29,6 @@ from rich.theme import Theme
 import typer
 from datetime import datetime
 
-# Custom Theme for Beautiful UI
 custom_theme = Theme({
     "info": "cyan",
     "warning": "yellow",
@@ -45,14 +44,11 @@ custom_theme = Theme({
     "key": "bold blue",
 })
 
-# Initialize Rich Console with custom theme
 console = Console(theme=custom_theme)
 
-# API Configuration
 API_BASE_URL = os.getenv("REAA_API_URL", "http://127.0.0.1:5000")
 API_KEY = os.getenv("REAA_API_KEY", "")
 
-# Initialize Typer App
 app = typer.Typer(
     name="reaa",
     help="REAA - Reverse Engineering Analysis Assistant CLI",
@@ -60,7 +56,6 @@ app = typer.Typer(
     rich_markup_mode="rich"
 )
 
-# Command Groups
 auth_app = typer.Typer(help="Authentication commands")
 analysis_app = typer.Typer(help="Binary analysis commands")
 security_app = typer.Typer(help="Security analysis commands")
@@ -154,14 +149,14 @@ class APIClient:
         try:
             headers = self.headers.copy()
             if files:
-                headers.pop("Content-Type", None)  # Let requests set it for multipart
+                headers.pop("Content-Type", None)
             
             response = requests.post(
                 f"{self.base_url}{endpoint}",
                 headers=headers,
                 json=data,
                 files=files,
-                timeout=300  # Longer timeout for file uploads
+                timeout=300
             )
             response.raise_for_status()
             return response.json()
@@ -196,7 +191,6 @@ class APIClient:
             return {"error": str(e)}
 
 
-# Global API Client
 api_client = APIClient()
 
 
@@ -236,7 +230,6 @@ def print_table(data: List[Dict], title: str = "", show_count: bool = True):
         padding=(0, 1)
     )
     
-    # Add columns from first item with styling
     for key in data[0].keys():
         table.add_column(
             key.replace("_", " ").title(),
@@ -245,7 +238,6 @@ def print_table(data: List[Dict], title: str = "", show_count: bool = True):
             max_width=50
         )
     
-    # Add rows with alternating row styles
     for i, item in enumerate(data):
         row_style = "" if i % 2 == 0 else "dim"
         table.add_row(*[str(v) for v in item.values()])
@@ -296,7 +288,6 @@ def print_separator(char: str = "─", length: int = 50):
     console.print(f"[dim]{char * length}[/dim]")
 
 
-# ============== ROOT COMMANDS ==============
 
 @app.command()
 def version():
@@ -367,7 +358,6 @@ def config(
         print_separator()
         console.print(f"[bold]API URL:[/bold] {API_BASE_URL}")
         
-        # Check secure storage
         secure_key = SecureStorage.get_api_key()
         if secure_key:
             console.print(f"[bold]API Key (Secure Storage):[/bold] {'*' * 20}")
@@ -381,7 +371,6 @@ def config(
         print_info("Use --remove to remove stored API key")
 
 
-# ============== AUTHENTICATION COMMANDS ==============
 
 @auth_app.command("register")
 def register(
@@ -462,7 +451,6 @@ def me():
         print_error("Failed to get user info")
 
 
-# ============== ANALYSIS COMMANDS ==============
 
 @analysis_app.command("upload")
 def upload(
@@ -690,7 +678,6 @@ def job_memory_search(
         print_error("Failed to search memory patterns")
 
 
-# ============== SECURITY ANALYSIS COMMANDS ==============
 
 @security_app.command("analyze")
 def security_analyze(
@@ -751,7 +738,6 @@ def security_scan(
         print_error("Scan failed")
 
 
-# ============== ACTIVE RE COMMANDS ==============
 
 @active_re_app.command("plan")
 def active_re_plan(
@@ -841,7 +827,6 @@ def active_re_chat(
         print_error("Chat failed")
 
 
-# ============== RAG COMMANDS ==============
 
 @rag_app.command("search")
 def rag_search(
@@ -909,7 +894,6 @@ def search_vulnerabilities(
         print_error("Search failed")
 
 
-# ============== ORCHESTRATOR COMMANDS ==============
 
 @orchestrator_app.command("plan")
 def orchestrator_plan(
@@ -990,7 +974,6 @@ def orchestrator_approve(
         print_error("Approval failed")
 
 
-# ============== RADARE2 COMMANDS ==============
 
 @radare2_app.command("status")
 def r2_status():
@@ -1038,7 +1021,6 @@ def r2_functions():
         print_error("Failed to get functions")
 
 
-# ============== SYSTEM COMMANDS ==============
 
 @system_app.command("docker")
 def docker_status():
@@ -1084,7 +1066,6 @@ def docker_logs(
         print_error("Failed to get logs")
 
 
-# ============== ADDITIONAL ENDPOINTS ==============
 
 @app.command("settings")
 def settings(
@@ -1143,7 +1124,6 @@ def graph(
         print_error("Failed to get graph")
 
 
-# ============== REMOTE COLLABORATION COMMANDS ==============
 
 remote_app = typer.Typer(help="Remote collaboration commands")
 app.add_typer(remote_app, name="remote", help="Remote collaboration commands")
