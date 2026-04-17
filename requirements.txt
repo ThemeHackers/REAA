@@ -22,8 +22,9 @@ torchaudio>=2.6.0
 transformers>=4.30.0
 accelerate>=1.13.0
 pyghidra
+unicorn>=2.1.4
 nvidia-ml-py==13.595.45
-
+rich>=15.0.0
 docker>=7.0.0
 frida>=16.0.0
 frida-tools>=12.0.0
