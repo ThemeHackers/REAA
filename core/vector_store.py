@@ -49,15 +49,25 @@ class VectorStore:
             log.error(f"Failed to initialize ChromaDB: {e}", exc_info=True)
 
     def create_collection(self, name: str, metadata: Dict[str, Any] = None) -> bool:
-        """Create a new collection"""
+        """Create a new collection (or get if it already exists)"""
         if not self.client:
             log.error("Vector database not initialized")
             return False
 
         try:
             if name in self.collections:
-                log.warning(f"Collection {name} already exists")
+                log.warning(f"Collection {name} already exists in cache")
                 return True
+
+        
+            try:
+                collection = self.client.get_collection(name)
+                self.collections[name] = collection
+                log.info(f"Collection {name} already exists, using existing")
+                return True
+            except:
+                
+                pass
 
             collection = self.client.create_collection(
                 name=name,

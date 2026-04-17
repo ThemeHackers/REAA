@@ -3,6 +3,7 @@ import json
 import logging
 import structlog
 import psutil
+import threading
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -15,6 +16,76 @@ class MemoryMonitor:
     def __init__(self):
         self.snapshots: List[Dict[str, Any]] = []
         self.memory_regions: Dict[int, List[Dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+        self.anomalies: List[Dict[str, Any]] = []
+        self.patterns: Dict[str, Dict[str, List[bytes]]] = {
+            "shellcode": {
+                "nop_sleds": [b"\x90\x90\x90\x90", b"\x90" * 8, b"\x90" * 16],
+                "common_opcodes": [
+                    b"\x31\xc0", 
+                    b"\x50",     
+                    b"\x90",    
+                    b"\xcc",     
+                    b"\xc3",     
+                    b"\xeb",    
+                    b"\xe9",      
+                ],
+                "shell_exec": [
+                    b"/bin/sh",
+                    b"cmd.exe",
+                    b"powershell",
+                ]
+            },
+            "encryption": {
+                "common_keys": [
+                    b"\x00\x11\x22\x33\x44\x55\x66\x77",  
+                    b"\x00\x01\x02\x03\x04\x05\x06\x07",  
+                    b"\x00" * 16,                        
+                    b"\xff" * 16,                       
+                ],
+                "iv_patterns": [
+                    b"\x00" * 16,  
+                    b"\x01" * 16, 
+                ]
+            },
+            "addresses": {
+                "stack_addresses": [
+                    b"\x7f",      
+                    b"\xff",    
+                ],
+                "heap_addresses": [
+                    b"\x55",      
+                    b"\x56",     
+                ],
+                "code_addresses": [
+                    b"\x40",     
+                    b"\x00",      
+                ]
+            },
+            "strings": {
+                "suspicious_strings": [
+                    b"http://",
+                    b"https://",
+                    b"ftp://",
+                    b"password",
+                    b"secret",
+                    b"key",
+                    b"token",
+                ],
+                "file_extensions": [
+                    b".exe",
+                    b".dll",
+                    b".sys",
+                    b".bat",
+                    b".cmd",
+                ]
+            }
+        }
+        self.anomaly_thresholds = {
+            "rapid_allocation_rate": 10,  
+            "memory_growth_rate": 100 * 1024 * 1024,  
+            "unusual_region_size": 50 * 1024 * 1024  
+        }
 
     def take_snapshot(self, pid: int) -> Optional[Dict[str, Any]]:
         """Take a memory snapshot of a process"""
@@ -47,8 +118,9 @@ class MemoryMonitor:
                 }
                 snapshot["regions"].append(region_info)
 
-            self.snapshots.append(snapshot)
-            self.memory_regions[pid] = snapshot["regions"]
+            with self._lock:
+                self.snapshots.append(snapshot)
+                self.memory_regions[pid] = snapshot["regions"]
 
             log.info(f"Memory snapshot taken for PID {pid}")
             return snapshot
@@ -229,3 +301,98 @@ class MemoryMonitor:
         """Clear all snapshots"""
         self.snapshots.clear()
         self.memory_regions.clear()
+
+    def detect_patterns(self, pid: int) -> Dict[str, Dict[str, List[int]]]:
+        """Detect known patterns in process memory"""
+        matches = {
+            "shellcode": {"nop_sleds": [], "common_opcodes": [], "shell_exec": []},
+            "encryption": {"common_keys": [], "iv_patterns": []},
+            "addresses": {"stack_addresses": [], "heap_addresses": [], "code_addresses": []},
+            "strings": {"suspicious_strings": [], "file_extensions": []}
+        }
+
+        try:
+            process = psutil.Process(pid)
+            memory_maps = process.memory_maps()
+
+            for region in memory_maps:
+                if "r" not in region.perms:
+                    continue
+
+                region_start = int(region.addr.split("-")[0], 16)
+                region_end = int(region.addr.split("-")[1], 16)
+
+                try:
+                    data = self.get_memory_dump(pid, region_start, region_end - region_start)
+                    if data:
+                        for category, subcategories in self.patterns.items():
+                            for subcategory, patterns in subcategories.items():
+                                for pattern in patterns:
+                                    offset = 0
+                                    while True:
+                                        pos = data.find(pattern, offset)
+                                        if pos == -1:
+                                            break
+                                        matches[category][subcategory].append(region_start + pos)
+                                        offset = pos + len(pattern)
+                except Exception:
+                    continue
+
+            return matches
+        except Exception as e:
+            log.error(f"Failed to detect patterns: {e}", exc_info=True)
+            return matches
+
+    def detect_anomalies(self, pid: int) -> List[Dict[str, Any]]:
+        """Detect memory anomalies"""
+        anomalies = []
+        
+        try:
+            snapshot = self.take_snapshot(pid)
+            if not snapshot:
+                return anomalies
+            
+       
+            for region in snapshot["regions"]:
+                size = region.get("size", 0)
+                if size > self.anomaly_thresholds["unusual_region_size"]:
+                    anomalies.append({
+                        "type": "large_region",
+                        "address": region["addr"],
+                        "size": size,
+                        "threshold": self.anomaly_thresholds["unusual_region_size"]
+                    })
+            
+          
+            if len(self.snapshots) >= 2:
+                prev_snapshot = self.snapshots[-2]
+                growth = snapshot["rss"] - prev_snapshot["rss"]
+                time_diff = (datetime.fromisoformat(snapshot["timestamp"]) -
+                           datetime.fromisoformat(prev_snapshot["timestamp"])).total_seconds()
+
+                if time_diff > 0:
+                    growth_rate = growth / time_diff
+                    if growth_rate > self.anomaly_thresholds["memory_growth_rate"]:
+                        anomalies.append({
+                            "type": "rapid_growth",
+                            "growth_rate": growth_rate,
+                            "threshold": self.anomaly_thresholds["memory_growth_rate"]
+                        })
+            
+            with self._lock:
+                self.anomalies.extend(anomalies)
+            
+            return anomalies
+        except Exception as e:
+            log.error(f"Failed to detect anomalies: {e}", exc_info=True)
+            return anomalies
+
+    def get_anomalies(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent anomalies"""
+        return self.anomalies[-limit:]
+
+    def clear_anomalies(self):
+        """Clear all anomalies"""
+        with self._lock:
+            self.anomalies.clear()
+        log.info("Cleared all memory anomalies")

@@ -4,6 +4,7 @@ import logging
 import structlog
 import psutil
 import subprocess
+import threading
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -16,6 +17,14 @@ class ProcessMonitor:
     def __init__(self):
         self.processes: Dict[int, Dict[str, Any]] = {}
         self.events: List[Dict[str, Any]] = []
+        self._lock = threading.Lock()
+        self.alerts: List[Dict[str, Any]] = []
+        self.monitoring_active = False
+        self.alert_thresholds = {
+            "cpu_percent": 80.0,
+            "memory_mb": 1000,
+            "connection_count": 50
+        }
 
     def start_monitoring(self, pid: int = None) -> Dict[str, Any]:
         """Start monitoring a specific process or all processes"""
@@ -63,7 +72,8 @@ class ProcessMonitor:
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 pass
 
-            self.processes[pid] = process_info
+            with self._lock:
+                self.processes[pid] = process_info
             self._log_event("process_monitored", {"pid": pid, "name": process.name()})
 
             return process_info
@@ -194,3 +204,97 @@ class ProcessMonitor:
         }
         self.events.append(event)
         log.info(f"Event logged: {event_type}", event_data=data)
+
+    def start_realtime_monitoring(self, pid: int, interval: int = 5, callback: Callable = None) -> None:
+        """Start real-time monitoring of a process"""
+        self.monitoring_active = True
+        import threading
+        
+        def monitor_loop():
+            while self.monitoring_active:
+                try:
+                    process_info = self._monitor_single_process(pid)
+                    self._check_alerts(process_info)
+                    if callback:
+                        callback(process_info)
+                except psutil.NoSuchProcess:
+                    self._log_event("process_terminated", {"pid": pid})
+                    break
+                except Exception as e:
+                    log.error(f"Error in realtime monitoring: {e}")
+                
+                import time
+                time.sleep(interval)
+        
+        thread = threading.Thread(target=monitor_loop, daemon=True)
+        thread.start()
+        log.info(f"Started realtime monitoring for PID {pid} with {interval}s interval")
+
+    def stop_realtime_monitoring(self) -> None:
+        """Stop real-time monitoring"""
+        self.monitoring_active = False
+        log.info("Stopped realtime monitoring")
+
+    def _check_alerts(self, process_info: Dict[str, Any]) -> None:
+        """Check if process exceeds alert thresholds"""
+        if "error" in process_info:
+            return
+
+        pid = process_info["pid"]
+        
+      
+        cpu_percent = process_info.get("cpu_percent", 0)
+        if cpu_percent > self.alert_thresholds["cpu_percent"]:
+            alert = {
+                "type": "cpu_high",
+                "pid": pid,
+                "value": cpu_percent,
+                "threshold": self.alert_thresholds["cpu_percent"],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            self.alerts.append(alert)
+            log.warning(f"CPU alert for PID {pid}: {cpu_percent}%")
+
+       
+        memory_mb = process_info.get("memory_info", {}).get("rss", 0) / (1024 * 1024)
+        if memory_mb > self.alert_thresholds["memory_mb"]:
+            alert = {
+                "type": "memory_high",
+                "pid": pid,
+                "value": memory_mb,
+                "threshold": self.alert_thresholds["memory_mb"],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            self.alerts.append(alert)
+            log.warning(f"Memory alert for PID {pid}: {memory_mb:.2f} MB")
+
+     
+        conn_count = len(process_info.get("connections", []))
+        if conn_count > self.alert_thresholds["connection_count"]:
+            alert = {
+                "type": "connection_high",
+                "pid": pid,
+                "value": conn_count,
+                "threshold": self.alert_thresholds["connection_count"],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            self.alerts.append(alert)
+            log.warning(f"Connection alert for PID {pid}: {conn_count} connections")
+
+    def get_alerts(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent alerts"""
+        return self.alerts[-limit:]
+
+    def clear_alerts(self) -> None:
+        """Clear all alerts"""
+        with self._lock:
+            self.alerts.clear()
+        log.info("Cleared all alerts")
+
+    def set_alert_threshold(self, metric: str, value: float) -> None:
+        """Set alert threshold for a metric"""
+        if metric in self.alert_thresholds:
+            self.alert_thresholds[metric] = value
+            log.info(f"Set alert threshold for {metric} to {value}")
+        else:
+            log.warning(f"Unknown metric: {metric}")

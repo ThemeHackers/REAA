@@ -25,6 +25,9 @@ class FridaInstrumentation:
         self.session = None
         self.scripts: List[frida.core.Script] = []
         self.messages: List[Dict[str, Any]] = []
+        self.auto_reconnect = True
+        self.max_reconnect_attempts = 3
+        self.reconnect_delay = 2
 
         if not FRIDA_AVAILABLE:
             log.warning("Frida not available, instrumentation will be disabled")
@@ -35,6 +38,7 @@ class FridaInstrumentation:
             log.info("Frida initialized successfully")
         except Exception as e:
             log.error(f"Failed to initialize Frida: {e}", exc_info=True)
+            self._attempt_reconnect()
 
     def attach_to_process(self, process_name: str) -> bool:
         if not FRIDA_AVAILABLE or not self.device:
@@ -160,6 +164,24 @@ class FridaInstrumentation:
 
     def is_available(self) -> bool:
         return FRIDA_AVAILABLE and self.device is not None
+
+    def _attempt_reconnect(self) -> bool:
+        """Attempt to reconnect to Frida device"""
+        if not self.auto_reconnect:
+            return False
+
+        for attempt in range(self.max_reconnect_attempts):
+            try:
+                import time
+                time.sleep(self.reconnect_delay)
+                self.device = frida.get_local_device()
+                log.info(f"Successfully reconnected to Frida device (attempt {attempt + 1})")
+                return True
+            except Exception as e:
+                log.warning(f"Reconnect attempt {attempt + 1} failed: {e}")
+        
+        log.error("Failed to reconnect to Frida device after all attempts")
+        return False
 
 
 class FridaScriptTemplates:
@@ -360,6 +382,101 @@ class FridaScriptTemplates:
             },
             onLeave: function(retval) {
                 log_network_op("recv", [this.sock, this.len, retval]);
+            }
+        });
+        """
+
+    @staticmethod
+    def crypto_monitoring() -> str:
+        return """
+        var crypto_ops = [];
+
+        function log_crypto_op(op, algo, key_size) {
+            var op_info = {
+                operation: op,
+                algorithm: algo,
+                key_size: key_size,
+                timestamp: Date.now()
+            };
+            send(op_info);
+        }
+
+        // Monitor common crypto APIs
+        Interceptor.attach(Module.findExportByName(null, "CryptEncrypt"), {
+            onEnter: function(args) {
+                log_crypto_op("CryptEncrypt", "AES/DES", args[3].toInt32());
+            }
+        });
+
+        Interceptor.attach(Module.findExportByName(null, "CryptDecrypt"), {
+            onEnter: function(args) {
+                log_crypto_op("CryptDecrypt", "AES/DES", args[3].toInt32());
+            }
+        });
+
+        Interceptor.attach(Module.findExportByName(null, "CryptCreateHash"), {
+            onEnter: function(args) {
+                log_crypto_op("CryptCreateHash", "HASH", 0);
+            }
+        });
+
+        // Monitor OpenSSL
+        var openssl_encrypt = Module.findExportByName(null, "EVP_EncryptInit_ex");
+        if (openssl_encrypt) {
+            Interceptor.attach(openssl_encrypt, {
+                onEnter: function(args) {
+                    log_crypto_op("EVP_EncryptInit_ex", "OpenSSL", 0);
+                }
+            });
+        }
+        """
+
+    @staticmethod
+    def registry_monitoring() -> str:
+        return """
+        var registry_ops = [];
+
+        function log_reg_op(op, key, value) {
+            var op_info = {
+                operation: op,
+                key: key ? key.readCString() : "null",
+                value: value ? value.readCString() : "null",
+                timestamp: Date.now()
+            };
+            send(op_info);
+        }
+
+        Interceptor.attach(Module.findExportByName(null, "RegOpenKeyExA"), {
+            onEnter: function(args) {
+                this.key = args[1];
+            },
+            onLeave: function(retval) {
+                if (retval.toInt32() === 0) {
+                    log_reg_op("RegOpenKeyExA", this.key, null);
+                }
+            }
+        });
+
+        Interceptor.attach(Module.findExportByName(null, "RegSetValueExA"), {
+            onEnter: function(args) {
+                this.key = args[0];
+                this.value = args[2];
+            },
+            onLeave: function(retval) {
+                if (retval.toInt32() === 0) {
+                    log_reg_op("RegSetValueExA", this.key, this.value);
+                }
+            }
+        });
+
+        Interceptor.attach(Module.findExportByName(null, "RegQueryValueExA"), {
+            onEnter: function(args) {
+                this.key = args[0];
+            },
+            onLeave: function(retval) {
+                if (retval.toInt32() === 0) {
+                    log_reg_op("RegQueryValueExA", this.key, null);
+                }
             }
         });
         """

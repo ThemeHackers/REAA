@@ -103,8 +103,14 @@ class LLMClient:
             global OpenAIChatModel, OpenAIProvider
 
             if OpenAIChatModel is None or OpenAIProvider is None:
-                from pydantic_ai.models.openai import OpenAIChatModel
-                from pydantic_ai.providers.openai import OpenAIProvider
+                try:
+                    from pydantic_ai.models.openai import OpenAIModel
+                    from pydantic_ai.providers.openai import OpenAIProvider
+                    OpenAIChatModel = OpenAIModel  
+                except ImportError:
+                
+                    from pydantic_ai.models.openai import OpenAIChatModel
+                    from pydantic_ai.providers.openai import OpenAIProvider
 
             provider = OpenAIProvider(base_url=self.api_base, api_key=self.api_key or "no-key")
             return OpenAIChatModel(self.model, provider=provider)

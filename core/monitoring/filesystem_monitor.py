@@ -4,6 +4,7 @@ import logging
 import structlog
 import psutil
 import subprocess
+import threading
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +18,11 @@ class FilesystemMonitor:
     def __init__(self):
         self.watches: Dict[str, Dict[str, Any]] = {}
         self.events: List[Dict[str, Any]] = []
+        self._lock = threading.Lock()
+        self.quarantine_dir: Optional[Path] = None
+        self.quarantined_files: Dict[str, Dict[str, Any]] = {}
+        self.realtime_active = False
+        self.realtime_thread = None
 
     def watch_directory(self, path: str, recursive: bool = True) -> bool:
         """Start watching a directory for changes"""
@@ -25,11 +31,12 @@ class FilesystemMonitor:
                 log.error(f"Directory {path} does not exist")
                 return False
 
-            self.watches[path] = {
-                "path": path,
-                "recursive": recursive,
-                "started_at": datetime.utcnow().isoformat()
-            }
+            with self._lock:
+                self.watches[path] = {
+                    "path": path,
+                    "recursive": recursive,
+                    "started_at": datetime.utcnow().isoformat()
+                }
 
             log.info(f"Started watching directory: {path}")
             return True
@@ -206,3 +213,103 @@ class FilesystemMonitor:
         }
         self.events.append(event)
         log.info(f"Filesystem event logged: {event_type}", event_data=data)
+
+    def set_quarantine_dir(self, path: str) -> bool:
+        """Set quarantine directory for suspicious files"""
+        try:
+            self.quarantine_dir = Path(path)
+            self.quarantine_dir.mkdir(parents=True, exist_ok=True)
+            log.info(f"Set quarantine directory: {path}")
+            return True
+        except Exception as e:
+            log.error(f"Failed to set quarantine directory: {e}", exc_info=True)
+            return False
+
+    def quarantine_file(self, file_path: str, reason: str) -> bool:
+        """Move suspicious file to quarantine"""
+        if not self.quarantine_dir:
+            log.error("Quarantine directory not set")
+            return False
+
+        try:
+            file_path = Path(file_path)
+            if not file_path.exists():
+                return False
+
+            quarantine_path = self.quarantine_dir / file_path.name
+            shutil.move(str(file_path), str(quarantine_path))
+
+            self.quarantined_files[str(file_path)] = {
+                "original_path": str(file_path),
+                "quarantine_path": str(quarantine_path),
+                "reason": reason,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+            self._log_event("file_quarantined", {
+                "path": str(file_path),
+                "reason": reason
+            })
+
+            log.info(f"Quarantined file: {file_path}")
+            return True
+        except Exception as e:
+            log.error(f"Failed to quarantine file {file_path}: {e}", exc_info=True)
+            return False
+
+    def restore_quarantined_file(self, file_path: str) -> bool:
+        """Restore file from quarantine"""
+        if file_path not in self.quarantined_files:
+            log.error(f"File not in quarantine: {file_path}")
+            return False
+
+        try:
+            quarantine_info = self.quarantined_files[file_path]
+            quarantine_path = Path(quarantine_info["quarantine_path"])
+            original_path = Path(quarantine_info["original_path"])
+
+            shutil.move(str(quarantine_path), str(original_path))
+            del self.quarantined_files[file_path]
+
+            self._log_event("file_restored", {
+                "path": str(file_path)
+            })
+
+            log.info(f"Restored quarantined file: {file_path}")
+            return True
+        except Exception as e:
+            log.error(f"Failed to restore file {file_path}: {e}", exc_info=True)
+            return False
+
+    def get_quarantined_files(self) -> List[Dict[str, Any]]:
+        """Get list of quarantined files"""
+        return list(self.quarantined_files.values())
+
+    def start_realtime_watching(self, path: str, interval: int = 5, callback: Callable = None) -> None:
+        """Start real-time watching of directory"""
+        import threading
+        import time
+
+        self.realtime_active = True
+
+        def watch_loop():
+            while self.realtime_active:
+                try:
+                    suspicious = self.detect_suspicious_files(path)
+                    if suspicious and callback:
+                        callback(suspicious)
+                except Exception as e:
+                    log.error(f"Error in realtime watching: {e}")
+
+                time.sleep(interval)
+
+        self.realtime_thread = threading.Thread(target=watch_loop, daemon=True)
+        self.realtime_thread.start()
+        log.info(f"Started realtime watching for {path}")
+
+    def stop_realtime_watching(self) -> None:
+        """Stop real-time watching"""
+        self.realtime_active = False
+        if self.realtime_thread:
+            self.realtime_thread.join(timeout=2)
+        log.info("Stopped realtime watching")

@@ -23,6 +23,9 @@ class AngrBridge:
         self.project = None
         self.simgr = None
         self.initial_state = None
+        self.result_cache: Dict[str, Dict[str, Any]] = {}
+        self.cache_enabled = True
+        self.default_timeout = getattr(settings, 'ANGR_DEFAULT_TIMEOUT', 300)
 
         if not ANGR_AVAILABLE:
             log.warning("angr not available, symbolic execution will be disabled")
@@ -78,12 +81,19 @@ class AngrBridge:
     def run_symbolic_execution(
         self,
         max_steps: int = 1000,
-        timeout: int = 300
+        timeout: int = None
     ) -> Dict[str, Any]:
         """Run symbolic execution with exploration techniques"""
         if not self.simgr:
             log.error("No simulation manager")
             return {"error": "No simulation manager"}
+
+        timeout = timeout or self.default_timeout
+        cache_key = f"symexec_{id(self.project)}_{max_steps}_{timeout}"
+        
+        if self.cache_enabled and cache_key in self.result_cache:
+            log.info(f"Returning cached result for symbolic execution")
+            return self.result_cache[cache_key]
 
         try:
             self.simgr.use_technique(et.Explorer(find=[], avoid=[]))
@@ -96,10 +106,15 @@ class AngrBridge:
                 "active": len(self.simgr.active),
                 "deadended": len(self.simgr.deadended),
                 "errored": len(self.simgr.errored),
-                "found": len(self.simgr.found)
+                "found": len(self.simgr.found),
+                "cached": False
             }
 
             log.info(f"Symbolic execution completed: {results}")
+            
+            if self.cache_enabled:
+                self.result_cache[cache_key] = {**results, "cached": True}
+            
             return results
         except Exception as e:
             log.error(f"Symbolic execution failed: {e}", exc_info=True)
@@ -248,6 +263,20 @@ class AngrBridge:
     def is_available(self) -> bool:
         """Check if angr is available"""
         return ANGR_AVAILABLE
+
+    def clear_cache(self):
+        """Clear the result cache"""
+        self.result_cache.clear()
+        log.info("Cleared angr result cache")
+
+    def get_cache_size(self) -> int:
+        """Get the number of cached results"""
+        return len(self.result_cache)
+
+    def enable_cache(self, enabled: bool = True):
+        """Enable or disable result caching"""
+        self.cache_enabled = enabled
+        log.info(f"Result caching {'enabled' if enabled else 'disabled'}")
 
 
 _angr_instance: Optional[AngrBridge] = None

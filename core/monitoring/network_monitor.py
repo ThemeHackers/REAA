@@ -4,6 +4,7 @@ import logging
 import structlog
 import psutil
 import pyshark
+import threading
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -16,6 +17,18 @@ class NetworkMonitor:
     def __init__(self):
         self.connections: List[Dict[str, Any]] = []
         self.captures: Dict[str, str] = {}
+        self._lock = threading.Lock()
+        self.threats: List[Dict[str, Any]] = []
+        self.protocol_analyzers = {
+            "dns": self._analyze_dns,
+            "http": self._analyze_http,
+            "tls": self._analyze_tls
+        }
+        self.threat_indicators = {
+            "c2_domains": ["evil.com", "malware.net", "c2server.org"],
+            "suspicious_ports": [6666, 6667, 4444, 31337, 12345, 5900],
+            "high_volume_threshold": 1000000  
+        }
 
     def get_all_connections(self) -> List[Dict[str, Any]]:
         """Get all network connections"""
@@ -39,7 +52,8 @@ class NetworkMonitor:
                 }
                 all_connections.append(conn_info)
 
-            self.connections = all_connections
+            with self._lock:
+                self.connections = all_connections
             return all_connections
 
         except Exception as e:
@@ -236,3 +250,129 @@ class NetworkMonitor:
     def clear_history(self):
         """Clear connection history"""
         self.connections.clear()
+
+    def _analyze_dns(self, packet) -> Optional[Dict[str, Any]]:
+        """Analyze DNS protocol"""
+        if not hasattr(packet, 'dns'):
+            return None
+        
+        try:
+            return {
+                "query": packet.dns.qry_name if hasattr(packet.dns, 'qry_name') else "unknown",
+                "type": packet.dns.qry_type if hasattr(packet.dns, 'qry_type') else "unknown",
+                "response": packet.dns.flags if hasattr(packet.dns, 'flags') else "unknown"
+            }
+        except:
+            return None
+
+    def _analyze_http(self, packet) -> Optional[Dict[str, Any]]:
+        """Analyze HTTP protocol"""
+        if not hasattr(packet, 'http'):
+            return None
+        
+        try:
+            return {
+                "host": packet.http.host if hasattr(packet.http, 'host') else "unknown",
+                "method": packet.http.request_method if hasattr(packet.http, 'request_method') else "unknown",
+                "uri": packet.http.request_uri if hasattr(packet.http, 'request_uri') else "/",
+                "user_agent": packet.http.user_agent if hasattr(packet.http, 'user_agent') else "unknown"
+            }
+        except:
+            return None
+
+    def _analyze_tls(self, packet) -> Optional[Dict[str, Any]]:
+        """Analyze TLS protocol"""
+        if not hasattr(packet, 'tls'):
+            return None
+        
+        try:
+            return {
+                "version": packet.tls.version if hasattr(packet.tls, 'version') else "unknown",
+                "cipher": packet.tls.cipher_suite if hasattr(packet.tls, 'cipher_suite') else "unknown"
+            }
+        except:
+            return None
+
+    def analyze_protocol_traffic(self, capture_file: str) -> Dict[str, List[Dict[str, Any]]]:
+        """Analyze protocol-specific traffic in capture"""
+        protocol_data = {"dns": [], "http": [], "tls": []}
+        
+        try:
+            cap = pyshark.FileCapture(capture_file)
+            
+            for packet in cap:
+                for protocol, analyzer in self.protocol_analyzers.items():
+                    result = analyzer(packet)
+                    if result:
+                        protocol_data[protocol].append(result)
+            
+            cap.close()
+            return protocol_data
+        except Exception as e:
+            log.error(f"Failed to analyze protocol traffic: {e}", exc_info=True)
+            return protocol_data
+
+    def detect_threats(self, capture_file: str = None) -> List[Dict[str, Any]]:
+        """Detect network threats"""
+        threats = []
+        
+        try:
+         
+            if not capture_file:
+                all_connections = self.get_all_connections()
+                
+                for conn in all_connections:
+                  
+                    if conn.get("raddr") and conn["raddr"]["port"] in self.threat_indicators["suspicious_ports"]:
+                        threats.append({
+                            "type": "suspicious_port",
+                            "connection": conn,
+                            "port": conn["raddr"]["port"]
+                        })
+                    
+                    
+                    if conn.get("raddr"):
+                        domain = conn["raddr"]["ip"]
+                        if any(c2 in domain for c2 in self.threat_indicators["c2_domains"]):
+                            threats.append({
+                                "type": "c2_domain",
+                                "connection": conn,
+                                "domain": domain
+                            })
+            else:
+         
+                protocol_data = self.analyze_protocol_traffic(capture_file)
+                
+             
+                for dns_query in protocol_data["dns"]:
+                    if any(c2 in dns_query["query"] for c2 in self.threat_indicators["c2_domains"]):
+                        threats.append({
+                            "type": "c2_domain",
+                            "query": dns_query["query"]
+                        })
+                
+              
+                for http_req in protocol_data["http"]:
+                    if any(c2 in http_req["host"] for c2 in self.threat_indicators["c2_domains"]):
+                        threats.append({
+                            "type": "c2_domain",
+                            "http_request": http_req
+                        })
+            
+            with self._lock:
+                self.threats.extend(threats)
+            
+            return threats
+        except Exception as e:
+            log.error(f"Failed to detect threats: {e}", exc_info=True)
+            return threats
+
+    def get_threats(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent threats"""
+        return self.threats[-limit:]
+
+    def clear_threats(self):
+        """Clear all threats"""
+        with self._lock:
+            self.threats.clear()
+        log.info("Cleared all network threats")
