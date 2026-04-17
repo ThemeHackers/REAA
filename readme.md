@@ -458,6 +458,7 @@ Each analysis generates comprehensive artifacts:
 - `GET /results/{job_id}/function/{addr}/refine` - Refine single function
 - `POST /api/jobs/{job_id}/refine/batch` - Batch refine all functions
 - `GET /api/jobs/{job_id}/pseudocode/files` - List pseudocode files
+- `GET /api/jobs/{job_id}/pseudocode/<filename>` - Get pseudocode file content
 - `POST /api/jobs/{job_id}/refine/selective` - Selective refinement
 
 ### Results & Visualization
@@ -513,7 +514,7 @@ Each analysis generates comprehensive artifacts:
 - `GET /api/remote/room/{job_id}/users` - Get users in remote room
 - `GET /api/remote/api-keys` - List API keys
 - `POST /api/remote/api-keys` - Create API key
-- `DELETE /api/remote/api-keys/{key}` - Delete API key
+- `DELETE /api/remote/api-keys/<key>` - Delete API key
 
 ### Active Reverse Engineering 
 - `POST /api/active-re/plan` - Plan Active RE execution strategy
