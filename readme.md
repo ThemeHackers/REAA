@@ -378,6 +378,84 @@ Each analysis generates comprehensive artifacts:
 - **coverage.json**: Analysis coverage metrics
 - **timeline.json**: Analysis progress tracking
 
+## 💻 CLI Tool
+
+REAA includes a beautiful Command Line Interface (CLI) tool for interacting with all API endpoints directly from the terminal.
+
+### Installation
+
+```bash
+cd cli
+pip install -r requirements.txt
+```
+
+### Configuration
+
+```bash
+# Set API URL
+export REAA_API_URL="http://127.0.0.1:5000"
+
+# Or use command
+reaa config --url http://127.0.0.1:5000
+```
+
+### Usage Examples
+
+```bash
+# Check system status
+reaa status
+
+# Upload and analyze binary
+reaa analysis upload /path/to/binary.exe
+reaa analysis jobs
+reaa analysis status <job-id>
+
+# Security analysis
+reaa security analyze <job-id> --message "Analyze for vulnerabilities"
+reaa security report <job-id>
+
+# Active Reverse Engineering
+reaa active-re plan /path/to/binary.exe --goal "vulnerability detection"
+reaa active-re execute <job-id> /path/to/binary.exe
+reaa active-re monitor <job-id> --duration 30
+
+# RAG search
+reaa rag search "buffer overflow" --n 5
+reaa rag similar-functions "int main() { return 0; }" --n 5
+
+# Orchestrator
+reaa orchestrator plan /path/to/binary.exe --request "Comprehensive analysis"
+reaa orchestrator execute <job-id> /path/to/binary.exe
+reaa orchestrator tasks
+
+# System monitoring
+reaa system docker
+reaa system gpu
+reaa system logs ghidra-api --lines 100
+```
+
+### Command Groups
+
+- **auth**: Authentication (register, login, logout, me)
+- **analysis**: Binary analysis (upload, jobs, status, delete, download)
+- **security**: Security analysis (analyze, report, scan)
+- **active-re**: Active Reverse Engineering (plan, execute, monitor, chat)
+- **rag**: RAG (search, similar-functions, vulnerabilities)
+- **orchestrator**: Orchestrator (plan, execute, tasks, approve)
+- **r2**: Radare2 integration (status, analyze, functions)
+- **system**: System monitoring (docker, gpu, logs)
+
+### Features
+
+- Beautiful terminal UI powered by Rich library
+- Complete API coverage
+- Interactive prompts
+- Progress indicators
+- Formatted tables and JSON output
+- Auto-completion support
+
+For detailed documentation, see [cli/README.md](cli/README.md)
+
 ## 🌐 WebUI Features
 
 ### Main Interface
