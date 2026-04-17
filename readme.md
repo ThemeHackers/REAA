@@ -111,6 +111,9 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 
 **Installation:**
 ```bash
+# Check Python version
+python --version # Should be 3.14.x or 3.14.3
+
 # Create virtual environment
 python -m venv .venv
 .venv\Scripts\activate
@@ -119,7 +122,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # For GPU support, install PyTorch with CUDA
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 # Verify GPU availability
 python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
