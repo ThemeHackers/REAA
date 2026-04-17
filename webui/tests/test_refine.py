@@ -5,6 +5,11 @@ Test script for LLM refiner to verify device mismatch fix
 import os
 import sys
 import time
+from rich.console import Console
+from rich.panel import Panel
+from rich import print as rprint
+
+console = Console()
 
 
 os.environ['LLM4DECOMPILE_MODEL_PATH'] = 'LLM4Binary/llm4decompile-1.3b-v2'
@@ -15,44 +20,49 @@ sys.path.insert(0, project_root)
 
 try:
     import torch
-    print(f"PyTorch version: {torch.__version__}")
-    print(f"CUDA available: {torch.cuda.is_available()}")
+    console.print(Panel(
+        f"[bold blue]PyTorch version:[/bold blue] {torch.__version__}\n[bold green]CUDA available:[/bold green] {torch.cuda.is_available()}",
+        title="[bold]PyTorch Check[/bold]",
+        border_style="blue"
+    ))
     if not torch.cuda.is_available():
-        print("\n[X] CUDA is NOT available in this environment")
-        print("To install CUDA version of PyTorch, run:")
-        print("pip uninstall torch torchvision torchaudio")
-        print("pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124")
+        console.print("\n[red][X] CUDA is NOT available in this environment[/red]")
+        console.print("[yellow]To install CUDA version of PyTorch, run:[/yellow]")
+        console.print("  pip uninstall torch torchvision torchaudio")
+        console.print("  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124")
         sys.exit(1)
-    print(f"CUDA device count: {torch.cuda.device_count()}")
+    console.print(f"[cyan]CUDA device count:[/cyan] {torch.cuda.device_count()}")
     for i in range(torch.cuda.device_count()):
-        print(f"Device {i}: {torch.cuda.get_device_name(i)}")
+        console.print(f"[dim]Device {i}:[/dim] {torch.cuda.get_device_name(i)}")
 except ImportError:
-    print("[X] Failed to import torch")
+    console.print("[red][X] Failed to import torch[/red]")
     sys.exit(1)
 
 from core.llm_refiner import get_refiner
 
 def test_refiner():
     """Test LLM refiner with a simple pseudocode"""
-    print("=" * 60)
-    print("Testing LLM Refiner")
-    print("=" * 60)
+    console.print(Panel(
+        "[bold cyan]Testing LLM Refiner[/bold cyan]",
+        title="[bold]REAA Test[/bold]",
+        border_style="cyan"
+    ))
 
-    print("\n[1] Getting LLM refiner...")
+    console.print("\n[bold][1][/bold] [blue]Getting LLM refiner...[/blue]")
     start_load = time.time()
     refiner = get_refiner()
     load_time = time.time() - start_load
-    print(f"    Model load time: {load_time:.2f} seconds ({load_time/60:.2f} minutes)")
+    console.print(f"[dim]    Model load time: {load_time:.2f} seconds ({load_time/60:.2f} minutes)[/dim]")
 
     if not refiner:
-        print("[X] Failed to get refiner")
+        console.print("[red][X] Failed to get refiner[/red]")
         return False
 
     if not refiner.is_available():
-        print("[X] Refiner not available")
+        console.print("[red][X] Refiner not available[/red]")
         return False
 
-    print("[OK] Refiner available")
+    console.print("[green][OK] Refiner available[/green]")
 
     test_pseudocode = """
 void DloadReleaseSectionWriteAccess(void)
@@ -73,27 +83,27 @@ void DloadReleaseSectionWriteAccess(void)
 }
 """
 
-    print(f"\n[2] Testing refinement with pseudocode (length: {len(test_pseudocode)})...")
-    print(f"Pseudocode:\n{test_pseudocode}")
+    console.print(f"\n[bold][2][/bold] [blue]Testing refinement with pseudocode (length: {len(test_pseudocode)})...[/blue]")
+    console.print(f"[dim]Pseudocode:\n{test_pseudocode}[/dim]")
 
     try:
         start_refine = time.time()
         refined = refiner.refine_pseudo_code(test_pseudocode)
         refine_time = time.time() - start_refine
-        print(f"    Refinement time: {refine_time:.2f} seconds ({refine_time/60:.2f} minutes)")
+        console.print(f"[dim]    Refinement time: {refine_time:.2f} seconds ({refine_time/60:.2f} minutes)[/dim]")
 
         if refined:
-            print(f"\n[OK] Refinement successful!")
-            print(f"\nRefined code:\n{refined}")
-            print(f"\nRefined code length: {len(refined)}")
-            print(f"\nTotal time: {load_time + refine_time:.2f} seconds ({(load_time + refine_time)/60:.2f} minutes)")
+            console.print(f"\n[green][OK] Refinement successful![/green]")
+            console.print(f"\n[bold]Refined code:[/bold]\n{refined}")
+            console.print(f"\n[cyan]Refined code length:[/cyan] {len(refined)}")
+            console.print(f"\n[yellow]Total time:[/yellow] {load_time + refine_time:.2f} seconds ({(load_time + refine_time)/60:.2f} minutes)")
             return True
         else:
-            print("\n[X] Refinement returned None")
+            console.print("\n[red][X] Refinement returned None[/red]")
             return False
 
     except Exception as e:
-        print(f"\n[X] Refinement failed with error: {e}")
+        console.print(f"\n[red][X] Refinement failed with error: {e}[/red]")
         import traceback
         traceback.print_exc()
         return False
@@ -101,11 +111,10 @@ void DloadReleaseSectionWriteAccess(void)
 if __name__ == "__main__":
     success = test_refiner()
 
-    print("\n" + "=" * 60)
-    if success:
-        print("[OK] TEST PASSED")
-    else:
-        print("[X] TEST FAILED")
-    print("=" * 60)
+    console.print(Panel(
+        "[bold green]TEST PASSED[/bold green]" if success else "[bold red]TEST FAILED[/bold red]",
+        title="[bold]Test Result[/bold]",
+        border_style="green" if success else "red"
+    ))
 
     sys.exit(0 if success else 1)
