@@ -402,6 +402,7 @@ def login(
     password: str = typer.Option(..., "--password", "-p", help="Password")
 ):
     """Login and get API token"""
+    global API_KEY, api_client
     print_header("User Login")
     
     data = {
@@ -412,7 +413,6 @@ def login(
     result = api_client.post("/api/auth/login", data=data)
     
     if "error" not in result and "token" in result:
-        global API_KEY, api_client
         API_KEY = result["token"]
         api_client = APIClient(API_BASE_URL, API_KEY)
         print_success("Login successful")
@@ -425,12 +425,12 @@ def login(
 @auth_app.command("logout")
 def logout():
     """Logout current user"""
+    global API_KEY, api_client
     print_header("User Logout")
     
     result = api_client.post("/api/auth/logout")
     
     if "error" not in result:
-        global API_KEY, api_client
         API_KEY = ""
         api_client = APIClient(API_BASE_URL, API_KEY)
         print_success("Logout successful")

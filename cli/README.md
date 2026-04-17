@@ -14,16 +14,21 @@ Beautiful CLI tool for interacting with REAA API endpoints using rich library.
 ## 📦 Installation
 
 ```bash
+.venv\Scripts\activate
 cd cli
 pip install -r requirements.txt
+pip install -e .
 ```
 
 ## 🔧 Configuration
 
 ### Set API URL
 ```bash
-# Environment variable
+# Linux/Mac (bash)
 export REAA_API_URL="http://127.0.0.1:5000"
+
+# Windows (PowerShell)
+$env:REAA_API_URL="http://127.0.0.1:5000"
 
 # Or use command
 reaa config --url http://127.0.0.1:5000
@@ -31,8 +36,11 @@ reaa config --url http://127.0.0.1:5000
 
 ### Set API Key
 ```bash
-# Environment variable
+# Linux/Mac (bash)
 export REAA_API_KEY="your-api-key-here"
+
+# Windows (PowerShell)
+$env:REAA_API_KEY="your-api-key-here"
 
 # Or use command
 reaa config --key your-api-key-here
@@ -43,6 +51,12 @@ reaa config --key your-api-key-here
 ### Basic Commands
 
 ```bash
+# Run CLI with python (before installation)
+python reaa_cli.py --help
+
+# After installation, use reaa directly
+reaa --help
+
 # Show version
 reaa version
 
