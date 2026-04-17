@@ -9,6 +9,10 @@ import sys
 import json
 import datetime
 from pathlib import Path
+from rich.console import Console
+from rich.panel import Panel
+
+console = Console()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -18,9 +22,9 @@ from models import db, Job, ChatHistory, SecurityReport
 def migrate_jobs():
     """Migrate job data from file system to database"""
     data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-    
+
     if not os.path.exists(data_dir):
-        print(f"Data directory not found: {data_dir}")
+        console.print(f"[red]Data directory not found: {data_dir}[/red]")
         return
     
     jobs_migrated = 0
@@ -35,15 +39,15 @@ def migrate_jobs():
         try:
             status_file = os.path.join(job_path, 'status.json')
             if not os.path.exists(status_file):
-                print(f"Skipping {job_id}: no status.json found")
+                console.print(f"[yellow]Skipping {job_id}: no status.json found[/yellow]")
                 continue
-            
+
             with open(status_file, 'r') as f:
                 status_data = json.load(f)
-            
+
             existing_job = Job.query.filter_by(id=job_id).first()
             if existing_job:
-                print(f"Skipping {job_id}: already exists in database")
+                console.print(f"[yellow]Skipping {job_id}: already exists in database[/yellow]")
                 continue
             
             job = Job(
@@ -86,59 +90,75 @@ def migrate_jobs():
             
             db.session.add(job)
             jobs_migrated += 1
-            print(f"Migrated job: {job_id}")
-            
+            console.print(f"[green]Migrated job: {job_id}[/green]")
+
         except Exception as e:
             error_msg = f"Error migrating {job_id}: {str(e)}"
-            print(error_msg)
+            console.print(f"[red]{error_msg}[/red]")
             errors.append(error_msg)
-    
+
     try:
         db.session.commit()
-        print(f"\nMigration completed successfully!")
-        print(f"Jobs migrated: {jobs_migrated}")
+        console.print(f"\n[green]Migration completed successfully![/green]")
+        console.print(f"[cyan]Jobs migrated: {jobs_migrated}[/cyan]")
         if errors:
-            print(f"\nErrors encountered: {len(errors)}")
+            console.print(f"\n[red]Errors encountered: {len(errors)}[/red]")
             for error in errors:
-                print(f"  - {error}")
+                console.print(f"  [red]-[/red] {error}")
     except Exception as e:
         db.session.rollback()
-        print(f"Error committing to database: {str(e)}")
+        console.print(f"[red]Error committing to database: {str(e)}[/red]")
 
 def create_default_admin():
     """Create default admin user"""
     from models import User
-    
+
+    admin_password = os.getenv('ADMIN_PASSWORD')
+    if not admin_password:
+        console.print("[red]ERROR: ADMIN_PASSWORD environment variable is required[/red]")
+        console.print("[yellow]Please set ADMIN_PASSWORD before running migration[/yellow]")
+        raise ValueError("ADMIN_PASSWORD environment variable is required for security")
+
     admin_username = os.getenv('ADMIN_USERNAME', 'admin')
     admin_email = os.getenv('ADMIN_EMAIL', 'admin@ai-reverse-engineering.local')
-    admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
-    
+
     admin = User.query.filter_by(username=admin_username).first()
     if admin:
-        print("Admin user already exists")
+        console.print("[yellow]Admin user already exists[/yellow]")
         return
-    
+
     admin = User(
         username=admin_username,
         email=admin_email,
         role='admin'
     )
     admin.set_password(admin_password)
-    
+
     db.session.add(admin)
     db.session.commit()
-    print(f"Created default admin user (username: {admin_username}, password: {admin_password})")
-    print("Please change the default password after first login!")
+    console.print(f"[green]Created admin user (username: {admin_username})[/green]")
+    console.print("[yellow]Remember to keep your password secure![/yellow]")
 
 if __name__ == '__main__':
     with app.app_context():
-        print("Starting data migration...")
-        print("=" * 50)
-        
+        console.print(Panel(
+            "[bold cyan]Starting data migration...[/bold cyan]",
+            title="[bold]REAA Data Migration[/bold]",
+            border_style="cyan"
+        ))
+
         migrate_jobs()
-        
-        print("\n" + "=" * 50)
-        
+
+        console.print(Panel(
+            "[bold cyan]Creating default admin user...[/bold cyan]",
+            title="[bold]Admin Setup[/bold]",
+            border_style="cyan"
+        ))
+
         create_default_admin()
-        
-        print("\nMigration process completed!")
+
+        console.print(Panel(
+            "[bold green]Migration process completed![/bold green]",
+            title="[bold]Done[/bold]",
+            border_style="green"
+        ))
