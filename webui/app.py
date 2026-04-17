@@ -8,22 +8,58 @@ import subprocess
 import signal
 import sys
 import re
+import time
 from pathlib import Path
+from rich.console import Console
+from functools import wraps
+
+console = Console()
+
+
+rate_limit_store = {}
+
+def rate_limit(max_requests=100, window_seconds=60):
+    """Simple rate limiting decorator"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            client_ip = request.remote_addr
+            current_time = time.time()
+            
+            
+            if client_ip in rate_limit_store:
+                rate_limit_store[client_ip] = [t for t in rate_limit_store[client_ip] if current_time - t < window_seconds]
+            else:
+                rate_limit_store[client_ip] = []
+            
+          
+            if len(rate_limit_store[client_ip]) >= max_requests:
+                log.warning(f"Rate limit exceeded for IP: {client_ip}")
+                return jsonify({"error": "Rate limit exceeded"}), 429
+            
+          
+            rate_limit_store[client_ip].append(current_time)
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, Response
 from flask_socketio import SocketIO, emit
 from ghidra_assistant import GhidraAssistant
 from security_agent import SecurityAgent
 from radare2_bridge import Radare2Bridge, Radare2AgentController
-from model import model_manager
+from webui.model import model_manager
 from models import db, User
 from auth import auth_manager, token_required, admin_required
 
 from webui.active_re_agent import get_active_re_agent
 from webui.orchestrator_agent import get_orchestrator_agent
 from webui.report_agent import get_report_agent
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 refiner_available = True  
@@ -54,7 +90,25 @@ if not jwt_secret:
 app.config['SECRET_KEY'] = jwt_secret
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///ai_re.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-socketio = SocketIO(app, cors_allowed_origins="*")
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws: wss:;"
+    return response
+
+
+cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5000,http://127.0.0.1:5000')
+cors_origins_list = [origin.strip() for origin in cors_origins.split(',')]
+socketio = SocketIO(app, cors_allowed_origins=cors_origins_list, async_mode='threading', manage_session=False)
 auth_manager.set_secret_key(jwt_secret)
 
 db.init_app(app)
@@ -71,14 +125,14 @@ try:
     import os
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from core.llm_refiner import get_refiner, initialize_refiner
-    print("[STARTUP] Pre-loading LLM refiner model...")
+    console.print("[STARTUP] Pre-loading LLM refiner model...")
     refiner_loaded = initialize_refiner()
     if refiner_loaded:
-        print("[STARTUP] LLM refiner model loaded successfully")
+        console.print("[green][STARTUP] [OK] LLM refiner model loaded successfully[/green]")
     else:
-        print("[STARTUP] LLM refiner model failed to load (will load on first use)")
+        console.print("[yellow][STARTUP] [WARNING] LLM refiner model failed to load (will load on first use)[/yellow]")
 except Exception as e:
-    print(f"[STARTUP] Failed to pre-load LLM refiner: {e}")
+    console.print(f"[red][STARTUP] [ERROR] Failed to pre-load LLM refiner: {e}[/red]")
 
 @app.route('/')
 def index():
@@ -120,9 +174,11 @@ def get_pseudocode_content(job_id, filename):
             "content": content
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_pseudocode_content: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve pseudocode"}), 500
 
 @app.route('/api/auth/register', methods=['POST'])
+@rate_limit(max_requests=5, window_seconds=60)
 def register():
     try:
         data = request.get_json()
@@ -157,9 +213,11 @@ def register():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        log.error(f"Error in register: {e}", exc_info=True)
+        return jsonify({'error': 'Registration failed'}), 500
 
 @app.route('/api/auth/login', methods=['POST'])
+@rate_limit(max_requests=10, window_seconds=60)
 def login():
     try:
         data = request.get_json()
@@ -189,9 +247,10 @@ def login():
             'token': token,
             'user': user.to_dict()
         })
-        
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        log.error(f"Error in login: {e}", exc_info=True)
+        return jsonify({'error': 'Login failed'}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
 @token_required
@@ -211,9 +270,11 @@ def logout():
         return jsonify({'success': True, 'message': 'Logged out successfully'})
         
     except (KeyError, IndexError) as e:
-        return jsonify({'error': f'Invalid token format: {str(e)}'}), 400
+        log.error(f"Invalid token format: {e}", exc_info=True)
+        return jsonify({'error': 'Invalid token format'}), 400
     except Exception as e:
-        return jsonify({'error': f'Logout failed: {str(e)}'}), 500
+        log.error(f"Error in logout: {e}", exc_info=True)
+        return jsonify({'error': 'Logout failed'}), 500
 
 @app.route('/api/auth/me', methods=['GET'])
 @token_required
@@ -224,11 +285,13 @@ def get_current_user():
             return jsonify({'error': 'User not found'}), 404
         
         return jsonify(user.to_dict())
-        
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        log.error(f"Error in get_current_user: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to retrieve user info'}), 500
 
 @app.route('/upload', methods=['POST'])
+@rate_limit(max_requests=20, window_seconds=60)
 def upload_file():
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -249,9 +312,11 @@ def upload_file():
         return jsonify(response.json())
 
     except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to connect to Ghidra service: {e}"}), 500
+        log.error(f"Failed to connect to Ghidra service: {e}", exc_info=True)
+        return jsonify({"error": "Failed to connect to Ghidra service"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in upload_file: {e}", exc_info=True)
+        return jsonify({"error": "Failed to upload file"}), 500
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -267,7 +332,8 @@ def chat():
             for chunk in assistant.chat_completion_stream(user_message, job_id):
                 yield f"data: {chunk}\n\n"
         except Exception as e:
-            error_event = json.dumps({"type": "error", "content": str(e)})
+            log.error(f"Error in chat stream: {e}", exc_info=True)
+            error_event = json.dumps({"type": "error", "content": "Chat stream error"})
             yield f"data: {error_event}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
@@ -296,7 +362,8 @@ def get_chat_history(job_id):
         history = assistant.load_history(job_id)
         return jsonify(history)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_chat_history: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve chat history"}), 500
 
 @app.route('/chat/history/<job_id>', methods=['DELETE'])
 def clear_chat_history(job_id):
@@ -307,7 +374,8 @@ def clear_chat_history(job_id):
         else:
             return jsonify({"error": "Failed to clear chat history"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in clear_chat_history: {e}", exc_info=True)
+        return jsonify({"error": "Failed to clear chat history"}), 500
 
 @app.route('/security/analyze', methods=['POST'])
 def security_analyze():
@@ -323,7 +391,8 @@ def security_analyze():
             for chunk in security_agent.security_analysis_stream(user_message, job_id):
                 yield f"data: {chunk}\n\n"
         except Exception as e:
-            error_event = json.dumps({"type": "error", "content": str(e)})
+            log.error(f"Error in security_analyze stream: {e}", exc_info=True)
+            error_event = json.dumps({"type": "error", "content": "Security analysis error"})
             yield f"data: {error_event}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
@@ -334,7 +403,8 @@ def security_report(job_id):
         report = security_agent.generate_security_report(job_id)
         return jsonify(report)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in security_report: {e}", exc_info=True)
+        return jsonify({"error": "Failed to generate security report"}), 500
 
 @app.route('/security/history/<job_id>', methods=['DELETE'])
 def clear_security_history(job_id):
@@ -345,7 +415,8 @@ def clear_security_history(job_id):
         else:
             return jsonify({"error": "Failed to clear security history"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in clear_security_history: {e}", exc_info=True)
+        return jsonify({"error": "Failed to clear security history"}), 500
 
 @app.route('/security/scan', methods=['POST'])
 def security_scan():
@@ -367,10 +438,11 @@ def security_scan():
             result = security_agent._assess_privilege_escalation(job_id)
         else:
             result = security_agent._analyze_binary_security(job_id)
-        
+
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in security_scan: {e}", exc_info=True)
+        return jsonify({"error": "Security scan failed"}), 500
 
 @app.route('/api/jobs', methods=['GET'])
 def api_list_jobs():
@@ -386,7 +458,7 @@ def api_list_jobs():
                 if os.path.isdir(item_path) and len(item) == 32:
                     job_directories.append(item)
         
-        print(f"Found job directories: {job_directories}")
+        console.print(f"[cyan][OK]Found job directories: {job_directories}[/cyan]")
         
         try:
             response = requests.get(f"{GHIDRA_API_BASE}/jobs", timeout=5)
@@ -482,7 +554,7 @@ def api_list_jobs():
             return jsonify({'jobs': enhanced_jobs})
             
         except requests.exceptions.RequestException as e:
-            print(f"Ghidra API not available: {e}")
+            console.print(f"[red]Ghidra API not available: {e}[/red]")
             enhanced_jobs = []
             for job_id in job_directories:
                 job_dir = os.path.join(data_dir, job_id)
@@ -507,9 +579,10 @@ def api_list_jobs():
                 enhanced_jobs.append(enhanced_job)
             
             return jsonify({'jobs': enhanced_jobs})
-        
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in api_list_jobs: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve jobs"}), 500
 
 @app.route('/api/jobs/<job_id>', methods=['DELETE'])
 def delete_job(job_id):
@@ -532,9 +605,10 @@ def delete_job(job_id):
             "cleanup_result": cleanup_result,
             "ghidra_available": ghidra_available
         })
-        
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in delete_job: {e}", exc_info=True)
+        return jsonify({"error": "Failed to delete job"}), 500
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
 def api_get_job(job_id):
@@ -567,11 +641,13 @@ def api_get_job(job_id):
         }
         
         return jsonify(job_details)
-        
+
     except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to get job details: {e}"}), 500
+        log.error(f"Failed to get job details: {e}", exc_info=True)
+        return jsonify({"error": "Failed to get job details"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in api_get_job: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve job details"}), 500
 
 @app.route('/api/jobs/<job_id>/download', methods=['GET'])
 def api_download_job_results(job_id):
@@ -586,21 +662,19 @@ def api_download_job_results(job_id):
                 history = assistant.load_history(job_id)
                 zip_file.writestr(f"chat_history_{job_id}.json", json.dumps(history, indent=2))
             except Exception as e:
-                zip_file.writestr(f"chat_history_error.txt", str(e))
-            
+                zip_file.writestr(f"chat_history_error.txt", "Failed to retrieve chat history")
             try:
                 security_report = security_agent.generate_security_report(job_id)
                 zip_file.writestr(f"security_report_{job_id}.json", json.dumps(security_report, indent=2))
             except Exception as e:
-                zip_file.writestr(f"security_report_error.txt", str(e))
-            
+                zip_file.writestr(f"security_report_error.txt", "Failed to generate security report")
             try:
                 status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}")
                 if status_response.ok:
                     status_data = status_response.json()
                     zip_file.writestr(f"job_status_{job_id}.json", json.dumps(status_data, indent=2))
             except Exception as e:
-                zip_file.writestr(f"job_status_error.txt", str(e))
+                zip_file.writestr(f"job_status_error.txt", "Failed to retrieve job status")
         
         zip_buffer.seek(0)
         
@@ -631,9 +705,10 @@ def api_system_status():
             'docker_command': 'docker-compose up -d'
         })
     except Exception as e:
+        log.error(f"Error in api_system_status: {e}", exc_info=True)
         return jsonify({
             'ghidra_online': False,
-            'error': str(e),
+            'error': 'Failed to get system status',
             'ghidra_api_url': GHIDRA_API_BASE,
             'docker_command': 'docker-compose up -d'
         }), 500
@@ -698,13 +773,15 @@ def api_docker_status():
             'running_containers': sum(1 for c in containers if c['health'] in ['running', 'healthy'])
         })
     except subprocess.TimeoutExpired:
+        log.error("Docker command timeout", exc_info=True)
         return jsonify({
             'error': 'Docker command timeout',
             'containers': []
         }), 500
     except Exception as e:
+        log.error(f"Error in api_docker_status: {e}", exc_info=True)
         return jsonify({
-            'error': str(e),
+            'error': 'Failed to get docker status',
             'containers': []
         }), 500
 
@@ -730,12 +807,14 @@ def api_docker_logs(container_name):
                 'error': f'Failed to get logs: {result.stderr}'
             }), 500
     except subprocess.TimeoutExpired:
+        log.error("Docker logs command timeout", exc_info=True)
         return jsonify({
             'error': 'Docker command timeout'
         }), 500
     except Exception as e:
+        log.error(f"Error in api_docker_logs: {e}", exc_info=True)
         return jsonify({
-            'error': str(e)
+            'error': 'Failed to get docker logs'
         }), 500
 
 @app.route('/api/gpu/status', methods=['GET'])
@@ -749,7 +828,8 @@ def api_gpu_status():
         gpu_stats = monitor.get_gpu_stats()
         return jsonify(gpu_stats)
     except Exception as e:
-        return jsonify({"error": str(e), "available": False}), 500
+        log.error(f"Error in api_gpu_status: {e}", exc_info=True)
+        return jsonify({"error": "Failed to get GPU status", "available": False}), 500
 
 @app.route('/gpu/status', methods=['GET'])
 def gpu_status():
@@ -762,7 +842,8 @@ def gpu_status():
         gpu_stats = monitor.get_gpu_stats()
         return jsonify(gpu_stats)
     except Exception as e:
-        return jsonify({"error": str(e), "available": False}), 500
+        log.error(f"Error in gpu_status: {e}", exc_info=True)
+        return jsonify({"error": "Failed to get GPU status", "available": False}), 500
 
 @app.route('/gpu/detailed', methods=['GET'])
 def gpu_detailed():
@@ -775,7 +856,8 @@ def gpu_detailed():
         gpu_info = monitor.get_detailed_info()
         return jsonify(gpu_info)
     except Exception as e:
-        return jsonify({"error": str(e), "available": False}), 500
+        log.error(f"Error in gpu_detailed: {e}", exc_info=True)
+        return jsonify({"error": "Failed to get GPU details", "available": False}), 500
 
 @app.route('/results/<job_id>/function/<addr>/refine', methods=['GET'])
 def get_refined(job_id, addr):
@@ -795,7 +877,8 @@ def get_refined(job_id, addr):
             content = file.read()
         return content, 200, {'Content-Type': 'text/plain'}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_refined: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve refined code"}), 500
 
 @app.route('/api/jobs/<job_id>/refine/batch', methods=['POST'])
 def batch_refine(job_id):
@@ -864,7 +947,7 @@ def batch_refine(job_id):
 
                 return {"addr": addr, "status": "success"}
             except Exception as e:
-                return {"addr": addr, "status": "error", "error": str(e)}
+                return {"addr": addr, "status": "error", "error": "ASM analysis failed"}
         
 
         results = []
@@ -890,7 +973,8 @@ def batch_refine(job_id):
             "results": results
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in batch_refine: {e}", exc_info=True)
+        return jsonify({"error": "Batch refinement failed"}), 500
 
 @app.route('/api/jobs/<job_id>/pseudocode/files', methods=['GET'])
 def get_pseudocode_files(job_id):
@@ -920,7 +1004,8 @@ def get_pseudocode_files(job_id):
             "refined_files": sorted(refined_files)
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_pseudocode_files: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve pseudocode files"}), 500
 
 @app.route('/api/jobs/<job_id>/diff/<filename>', methods=['GET'])
 def get_file_diff(job_id, filename):
@@ -956,7 +1041,8 @@ def get_file_diff(job_id, filename):
             "has_changes": len(diff) > 0
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_file_diff: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve file diff"}), 500
 
 @app.route('/api/jobs/<job_id>/refine/selective', methods=['POST'])
 def selective_refine(job_id):
@@ -1042,7 +1128,7 @@ def selective_refine(job_id):
                 print(f"[DEBUG] Error refining {addr}: {e}")
                 import traceback
                 traceback.print_exc()
-                return {"addr": addr, "status": "error", "error": str(e)}
+                return {"addr": addr, "status": "error", "error": "ASM analysis failed"}
 
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -1067,7 +1153,8 @@ def selective_refine(job_id):
             "results": results
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in selective_refine: {e}", exc_info=True)
+        return jsonify({"error": "Selective refinement failed"}), 500
 
 @app.route('/api/jobs/cleanup', methods=['POST'])
 def api_cleanup_jobs():
@@ -1105,15 +1192,17 @@ def api_cleanup_jobs():
                 else:
                     errors.append(f"Failed to delete job {job_id}")
             except Exception as e:
-                errors.append(f"Error deleting job {job_id}: {str(e)}")
-        
+                log.error(f"Error deleting job {job_id}: {e}", exc_info=True)
+                errors.append(f"Error deleting job {job_id}")
+
         return jsonify({
             "deleted_count": deleted_count,
             "errors": errors
         })
-        
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in api_cleanup_jobs: {e}", exc_info=True)
+        return jsonify({"error": "Failed to cleanup jobs"}), 500
 
 def cleanup_job_data(job_id):
     import os
@@ -1221,12 +1310,10 @@ def r2_execute_command():
             "stderr": result.get('stderr', '')
         })
     except Exception as e:
-        import traceback
-        print(f"Error executing r2 command: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
+        log.error(f"Error executing r2 command: {e}", exc_info=True)
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "Failed to execute r2 command"
         }), 500
 
 @app.route('/api/r2/load', methods=['POST'])
@@ -1297,10 +1384,8 @@ def r2_load_file():
             "output": result.get('output', '')
         })
     except Exception as e:
-        import traceback
-        print(f"Error loading file into radare2: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error loading file into radare2: {e}", exc_info=True)
+        return jsonify({"error": "Failed to load file into radare2"}), 500
 
 @app.route('/api/r2/functions', methods=['GET'])
 def r2_get_functions():
@@ -1313,10 +1398,11 @@ def get_job_functions(job_id):
         response = requests.get(f"{GHIDRA_API_BASE}/jobs/{job_id}/functions", timeout=5)
         if response.ok:
             return jsonify(response.json())
-        
+
         return jsonify({"functions": []})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_job_functions: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve job functions"}), 500
 
 @app.route('/api/r2/strings', methods=['GET'])
 def r2_get_strings():
@@ -1373,14 +1459,16 @@ def r2_asm_preset():
     try:
         r2_bridge.apply_preset(preset)
         return jsonify({
-            "success": True, 
+            "success": True,
             "preset": preset,
             "config": r2_bridge.get_asm_config()
         })
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        log.error(f"Invalid ASM preset: {e}", exc_info=True)
+        return jsonify({"error": "Invalid ASM preset"}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in r2_asm_preset: {e}", exc_info=True)
+        return jsonify({"error": "Failed to apply ASM preset"}), 500
 
 @app.route('/api/r2/disasm/function', methods=['POST'])
 def r2_disasm_function():
@@ -1472,12 +1560,10 @@ Please provide a comprehensive analysis covering:
             "is_security_related": is_security_related
         })
     except Exception as e:
-        import traceback
-        print(f"Error analyzing ASM code: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
+        log.error(f"Error analyzing ASM code: {e}", exc_info=True)
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "Failed to analyze ASM code"
         }), 500
 
 def transform_memory_data(data):
@@ -1652,12 +1738,10 @@ def get_memory_hex_dump(job_id, section_name):
             "section": section_name,
             "source": "binary_file"
         })
-        
+
     except Exception as e:
-        import traceback
-        print(f"Error in get_memory_hex_dump: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_memory_hex_dump: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve memory hex dump"}), 500
 
 @app.route('/api/jobs/<job_id>/memory/analysis', methods=['GET'])
 def get_memory_analysis(job_id):
@@ -1752,12 +1836,10 @@ def get_memory_analysis(job_id):
             })
         
         return jsonify(analysis)
-        
+
     except Exception as e:
-        import traceback
-        print(f"Error in get_memory_analysis: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_memory_analysis: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve memory analysis"}), 500
 
 @app.route('/api/jobs/<job_id>/memory/strings', methods=['GET'])
 def get_memory_strings(job_id):
@@ -1843,12 +1925,10 @@ def get_memory_strings(job_id):
             "count": len(strings),
             "min_length": min_length
         })
-        
+
     except Exception as e:
-        import traceback
-        print(f"Error in get_memory_strings: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_memory_strings: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve memory strings"}), 500
 
 @app.route('/api/jobs/<job_id>/memory/<address>/xref', methods=['GET'])
 def get_memory_xref(job_id, address):
@@ -1888,12 +1968,10 @@ def get_memory_xref(job_id, address):
             "total_refs": 0,
             "error": "No cross-reference data available"
         })
-        
+
     except Exception as e:
-        import traceback
-        print(f"Error in get_memory_xref: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_memory_xref: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve memory xref"}), 500
 
 @app.route('/api/jobs/<job_id>/memory/compare/<section1>/<section2>', methods=['GET'])
 def compare_memory_sections(job_id, section1, section2):
@@ -1987,10 +2065,8 @@ def compare_memory_sections(job_id, section1, section2):
         })
         
     except Exception as e:
-        import traceback
-        print(f"Error in compare_memory_sections: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in compare_memory_sections: {e}", exc_info=True)
+        return jsonify({"error": "Failed to compare memory sections"}), 500
 
 @app.route('/api/jobs/<job_id>/memory/pattern/search', methods=['POST'])
 def search_memory_pattern(job_id):
@@ -2104,12 +2180,10 @@ def search_memory_pattern(job_id):
             "matches": results,
             "count": len(results)
         })
-        
+
     except Exception as e:
-        import traceback
-        print(f"Error in search_memory_pattern: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in search_memory_pattern: {e}", exc_info=True)
+        return jsonify({"error": "Failed to search memory pattern"}), 500
 
 @app.route('/api/remote/health', methods=['GET'])
 def remote_health():
@@ -2137,7 +2211,8 @@ def remote_server_status():
             "version": "1.0.0"
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in remote_server_status: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve remote server status"}), 500
 
 @app.route('/api/remote/jobs', methods=['GET'])
 def get_remote_jobs():
@@ -2197,7 +2272,8 @@ def get_remote_jobs():
 
         return jsonify({"jobs": jobs})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_remote_jobs: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve remote jobs"}), 500
 
 @app.route('/api/remote/room/<job_id>/users', methods=['GET'])
 def get_room_users(job_id):
@@ -2214,7 +2290,8 @@ def get_room_users(job_id):
         ]
         return jsonify({"users": users_list})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_users: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve users"}), 500
 
 @app.route('/api/remote/api-keys', methods=['GET'])
 @admin_required
@@ -2248,7 +2325,7 @@ connected_clients = {}
 
 @socketio.on('connect')
 def handle_connect():
-    print(f"Client connected: {request.sid}")
+    console.print(f"[green][OK]Client connected: {request.sid}[/green]")
     connected_clients[request.sid] = {
         'username': 'Anonymous',
         'connected_at': datetime.datetime.now().isoformat(),
@@ -2261,7 +2338,7 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print(f"Client disconnected: {request.sid}")
+    console.print(f"[yellow][OK]Client disconnected: {request.sid}[/yellow]")
     for room_id in list(room_users.keys()):
         for user_id in list(room_users[room_id].keys()):
             if user_id == request.sid:
@@ -2595,7 +2672,8 @@ def get_strings(job_id):
             ]
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_strings: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve strings"}), 500
 
 @app.route('/api/jobs/<job_id>/imports', methods=['GET'])
 def get_imports(job_id):
@@ -2628,39 +2706,41 @@ def get_imports(job_id):
             "libraries": ["kernel32.dll", "user32.dll"]
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_imports: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve imports"}), 500
 
 @app.route('/api/settings', methods=['POST'])
+@admin_required
 def save_settings():
     
     try:
         data = request.get_json()
         r2_path = data.get('r2_path')
         ghidra_url = data.get('ghidra_url')
-        
-        print(f"Saving settings - r2_path: {r2_path}, ghidra_url: {ghidra_url}")
-        
+
+        console.print(f"[cyan][OK]Saving settings - r2_path: {r2_path}, ghidra_url: {ghidra_url}[/cyan]")
+
         global GHIDRA_API_BASE
         if ghidra_url:
             GHIDRA_API_BASE = ghidra_url
-            print(f"Updated GHIDRA_API_BASE to: {GHIDRA_API_BASE}")
+            console.print(f"[green][OK]Updated GHIDRA_API_BASE to: {GHIDRA_API_BASE}[/green]")
         
         global r2_bridge, r2_agent
         if r2_path:
-            print(f"Reinitializing radare2 bridge with custom path: {r2_path}")
+            console.print(f"[cyan][OK]Reinitializing radare2 bridge with custom path: {r2_path}[/cyan]")
             r2_bridge = Radare2Bridge(r2_path)
         else:
-            print("Reinitializing radare2 bridge with auto-detection")
+            console.print("[cyan][OK]Reinitializing radare2 bridge with auto-detection[/cyan]")
             r2_bridge = Radare2Bridge()
         r2_agent = Radare2AgentController(r2_bridge)
         
-        print("Settings saved successfully")
+        console.print("[green][OK]Settings saved successfully[/green]")
         return jsonify({"success": True})
     except Exception as e:
         import traceback
-        print(f"Error saving settings: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        console.print(f"[red]Error saving settings: {e}[/red]")
+        console.print(f"[red]Traceback: {traceback.format_exc()}[/red]")
+        return jsonify({"success": False, "error": "Failed to save settings"}), 500
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
@@ -2671,7 +2751,8 @@ def get_models():
             "system_status": model_manager.get_system_status()
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_models: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve models"}), 500
 
 @app.route('/api/models/current', methods=['GET'])
 def get_current_model():
@@ -2682,9 +2763,11 @@ def get_current_model():
             "info": model_manager.get_model_info()
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_current_model: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve current model"}), 500
 
 @app.route('/api/models/switch', methods=['POST'])
+@admin_required
 def switch_model():
   
     try:
@@ -2704,18 +2787,22 @@ def switch_model():
         else:
             return jsonify({"error": "Failed to switch model"}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in switch_model: {e}", exc_info=True)
+        return jsonify({"error": "Failed to switch model"}), 500
 
 @app.route('/api/models/test', methods=['POST'])
+@admin_required
 def test_model():
     
     try:
         result = model_manager.test_model_connection()
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in test_model: {e}", exc_info=True)
+        return jsonify({"error": "Failed to test model"}), 500
 
 @app.route('/api/models/config', methods=['POST'])
+@admin_required
 def update_model_config():
    
     try:
@@ -2735,7 +2822,8 @@ def update_model_config():
         else:
             return jsonify({"error": "Failed to update model configuration"}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in update_model_config: {e}", exc_info=True)
+        return jsonify({"error": "Failed to update model configuration"}), 500
 
 @app.route('/api/graph/<job_id>', methods=['GET'])
 def get_graph_data(job_id):
@@ -2765,9 +2853,11 @@ def get_graph_data(job_id):
             }
             return jsonify(mock_data)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_graph_data: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve graph data"}), 500
 
 @app.route('/api/r2/test', methods=['POST'])
+@admin_required
 def test_r2_path():
    
     try:
@@ -2793,23 +2883,12 @@ def test_r2_path():
             "version": version
         })
     except Exception as e:
-        import traceback
-        print(f"Error testing radare2 path: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
+        log.error(f"Error testing radare2 path: {e}", exc_info=True)
         return jsonify({
             "available": False,
-            "error": str(e)
+            "error": "Failed to test radare2 path"
         })
 
-
-@socketio.on('connect')
-def handle_connect():
-    print('Client connected')
-    emit('connected', {'message': 'Connected to AI Reverse Engineering Server'})
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    print('Client disconnected')
 
 @socketio.on('ping')
 def handle_ping():
@@ -2831,7 +2910,8 @@ def handle_job_status_request(data):
                 status_data = response.json()
                 emit('job_status_update', status_data)
         except Exception as e:
-            emit('error', {'message': f'Failed to get job status: {str(e)}'})
+            log.error(f"Error in handle_job_status_request: {e}", exc_info=True)
+            emit('error', {'message': 'Failed to get job status'})
 
 @socketio.on('heartbeat')
 def handle_heartbeat(sid):
@@ -2853,7 +2933,8 @@ def active_re_plan():
 
         return jsonify(plan)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in active_re_plan: {e}", exc_info=True)
+        return jsonify({"error": "Failed to plan active RE execution"}), 500
 
 @app.route('/api/active-re/execute', methods=['POST'])
 def active_re_execute():
@@ -2871,7 +2952,8 @@ def active_re_execute():
 
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in active_re_execute: {e}", exc_info=True)
+        return jsonify({"error": "Failed to execute active RE"}), 500
 
 @app.route('/api/active-re/monitor', methods=['POST'])
 def active_re_monitor():
@@ -2888,7 +2970,8 @@ def active_re_monitor():
 
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in active_re_monitor: {e}", exc_info=True)
+        return jsonify({"error": "Failed to monitor active RE"}), 500
 
 @app.route('/api/active-re/chat', methods=['POST'])
 def active_re_chat():
@@ -2904,7 +2987,8 @@ def active_re_chat():
 
         return jsonify({"response": response})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in active_re_chat: {e}", exc_info=True)
+        return jsonify({"error": "Failed to complete active RE chat"}), 500
 
 @app.route('/api/orchestrator/plan', methods=['POST'])
 def orchestrator_plan():
@@ -2922,7 +3006,8 @@ def orchestrator_plan():
 
         return jsonify(strategy)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in orchestrator_plan: {e}", exc_info=True)
+        return jsonify({"error": "Failed to plan orchestrator execution"}), 500
 
 @app.route('/api/orchestrator/execute', methods=['POST'])
 def orchestrator_execute():
@@ -2940,7 +3025,8 @@ def orchestrator_execute():
 
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in orchestrator_execute: {e}", exc_info=True)
+        return jsonify({"error": "Failed to execute orchestrator analysis"}), 500
 
 @app.route('/api/orchestrator/approvals', methods=['GET'])
 def orchestrator_approvals():
@@ -2950,7 +3036,8 @@ def orchestrator_approvals():
 
         return jsonify({"approvals": approvals})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in orchestrator_approvals: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve orchestrator approvals"}), 500
 
 @app.route('/api/orchestrator/approve', methods=['POST'])
 def orchestrator_approve():
@@ -2967,7 +3054,8 @@ def orchestrator_approve():
 
         return jsonify({"success": result})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in orchestrator_approve: {e}", exc_info=True)
+        return jsonify({"error": "Failed to approve orchestrator operation"}), 500
 
 @app.route('/api/orchestrator/tasks', methods=['GET'])
 def orchestrator_tasks():
@@ -2977,7 +3065,8 @@ def orchestrator_tasks():
 
         return jsonify(tasks)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in get_graph_data: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve graph data"}), 500
 
 @app.route('/api/orchestrator/tasks/<job_id>', methods=['GET'])
 def orchestrator_task_status(job_id):
@@ -2990,7 +3079,8 @@ def orchestrator_task_status(job_id):
 
         return jsonify(task)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in orchestrator_task_status: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve task status"}), 500
 
 @app.route('/api/report/generate', methods=['POST'])
 def report_generate():
@@ -3008,7 +3098,8 @@ def report_generate():
 
         return jsonify(report)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in report_generate: {e}", exc_info=True)
+        return jsonify({"error": "Failed to generate report"}), 500
 
 @app.route('/api/rag/search', methods=['POST'])
 def rag_search():
@@ -3029,7 +3120,8 @@ def rag_search():
 
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in rag_search: {e}", exc_info=True)
+        return jsonify({"error": "Failed to perform RAG search"}), 500
 
 @app.route('/api/rag/similar-functions', methods=['POST'])
 def rag_similar_functions():
@@ -3049,7 +3141,8 @@ def rag_similar_functions():
 
         return jsonify({"results": results})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in rag_similar_functions: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve similar functions"}), 500
 
 @app.route('/api/rag/vulnerabilities', methods=['POST'])
 def rag_vulnerabilities():
@@ -3069,7 +3162,8 @@ def rag_vulnerabilities():
 
         return jsonify({"results": results})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Error in rag_vulnerabilities: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve vulnerability patterns"}), 500
 
 def signal_handler(sig, frame):
    
@@ -3089,16 +3183,16 @@ def signal_handler(sig, frame):
             except:
                 pass
         
-        print("All connections force closed. Exiting...")
+        console.print("[yellow]All connections force closed. Exiting...[/yellow]")
     except Exception as e:
-        print(f"Error during force shutdown: {e}")
+        console.print(f"[red]Error during force shutdown: {e}[/red]")
     finally:
         sys.exit(0)
 
 if __name__ == '__main__':
     try:
-        print("Starting server...")
-        print("Model is loaded and ready.")
+        console.print("[cyan]Starting server...[/cyan]")
+        console.print("[green][OK] Model is loaded and ready.[/green]")
         
        
         signal.signal(signal.SIGINT, signal_handler)
@@ -3107,23 +3201,23 @@ if __name__ == '__main__':
             try:
                 db.create_all()
             except Exception as e:
-                print(f"Warning: Failed to create database tables: {e}")
-                print("Continuing without database initialization...")
+                console.print(f"[yellow][WARNING] Failed to create database tables: {e}[/yellow]")
+                console.print("[yellow][WARNING] Continuing without database initialization...[/yellow]")
         
         socketio.run(app, debug=False, port=5000)
     except KeyboardInterrupt:
-        print("\n\nServer shutdown requested by user")
+        console.print("\n\n[yellow][OK] Server shutdown requested by user[/yellow]")
         signal_handler(signal.SIGINT, None)
     except (OSError, PermissionError) as e:
-        print(f"\n\nSystem error: {e}")
-        print("Please check file permissions and try again")
+        console.print(f"\n\n[red][ERROR] System error: {e}[/red]")
+        console.print("[yellow][WARNING] Please check file permissions and try again[/yellow]")
         sys.exit(1)
     except ImportError as e:
-        print(f"\n\nImport error: {e}")
-        print("Please check that all required dependencies are installed")
+        console.print(f"\n\n[red][ERROR] Import error: {e}[/red]")
+        console.print("[yellow][WARNING] Please check that all required dependencies are installed[/yellow]")
         sys.exit(1)
     except Exception as e:
-        print(f"\n\nUnexpected error during startup: {e}")
+        console.print(f"\n\n[red][ERROR] Unexpected error during startup: {e}[/red]")
         import traceback
         traceback.print_exc()
         sys.exit(1)
