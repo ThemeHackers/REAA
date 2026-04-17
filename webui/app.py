@@ -7,6 +7,8 @@ import datetime
 import subprocess
 import signal
 import sys
+import re
+from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, Response
 from flask_socketio import SocketIO, emit
@@ -15,7 +17,7 @@ from security_agent import SecurityAgent
 from radare2_bridge import Radare2Bridge, Radare2AgentController
 from model import model_manager
 from models import db, User
-from auth import auth_manager, token_required
+from auth import auth_manager, token_required, admin_required
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,6 +27,9 @@ refiner_available = True
 load_dotenv()
 
 VALID_API_KEYS = set(os.getenv('VALID_API_KEYS', '').split(',')) if os.getenv('VALID_API_KEYS') else set()
+BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = BASE_DIR / 'data'
+SAFE_JOB_ID_PATTERN = re.compile(r'^[A-Za-z0-9._-]+$')
 
 
 def generate_api_key():
@@ -39,10 +44,14 @@ def validate_api_key(api_key):
     return api_key in VALID_API_KEYS
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.urandom(24)
+jwt_secret = os.getenv('JWT_SECRET_KEY') or os.getenv('SECRET_KEY')
+if not jwt_secret:
+    jwt_secret = base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8')
+app.config['SECRET_KEY'] = jwt_secret
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///ai_re.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 socketio = SocketIO(app, cors_allowed_origins="*")
+auth_manager.set_secret_key(jwt_secret)
 
 db.init_app(app)
 
@@ -71,6 +80,17 @@ except Exception as e:
 def index():
     return render_template('index.html')
 
+def _validate_job_id(job_id):
+    if not SAFE_JOB_ID_PATTERN.fullmatch(job_id):
+        raise ValueError("Invalid job_id format")
+
+def _resolve_within_base(base_dir, untrusted_path):
+    base_resolved = Path(base_dir).resolve()
+    candidate = (base_resolved / untrusted_path).resolve()
+    if candidate != base_resolved and base_resolved not in candidate.parents:
+        raise ValueError("Path traversal detected")
+    return candidate
+
 @app.route('/pseudocode')
 def pseudocode():
     return render_template('pseudocode.html')
@@ -78,12 +98,14 @@ def pseudocode():
 @app.route('/api/jobs/<job_id>/pseudocode/<filename>', methods=['GET'])
 def get_pseudocode_content(job_id, filename):
     try:
-        import os
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
-        pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
-        file_path = os.path.join(pseudocode_dir, filename)
+        _validate_job_id(job_id)
+        if '/' in filename or '\\' in filename:
+            raise ValueError("Invalid filename")
+
+        pseudocode_dir = DATA_DIR / job_id / "artifacts" / "pseudocode"
+        file_path = _resolve_within_base(pseudocode_dir, filename)
         
-        if not os.path.exists(file_path):
+        if not file_path.exists():
             return jsonify({"error": "Pseudocode file not found"}), 404
         
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -754,13 +776,16 @@ def gpu_detailed():
 @app.route('/results/<job_id>/function/<addr>/refine', methods=['GET'])
 def get_refined(job_id, addr):
     try:
-        import os
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
-        addr_norm = addr.lower()
+        _validate_job_id(job_id)
+        addr_norm = addr.lower().strip()
         if not addr_norm.startswith("0x"):
             addr_norm = "0x" + addr_norm
-        f = os.path.join(data_dir, job_id, "artifacts", "refine", f"{addr}.c")
-        if not os.path.exists(f):
+        if not re.fullmatch(r"0x[0-9a-f]+", addr_norm):
+            return jsonify({"error": "Invalid function address format"}), 400
+
+        refine_dir = DATA_DIR / job_id / "artifacts" / "refine"
+        f = _resolve_within_base(refine_dir, f"{addr_norm}.c")
+        if not f.exists():
             return jsonify({"error": "refined code not found"}), 404
         with open(f, 'r') as file:
             content = file.read()
@@ -896,20 +921,21 @@ def get_pseudocode_files(job_id):
 @app.route('/api/jobs/<job_id>/diff/<filename>', methods=['GET'])
 def get_file_diff(job_id, filename):
     try:
-        import os
         import difflib
+        _validate_job_id(job_id)
+        if '/' in filename or '\\' in filename:
+            return jsonify({"error": "Invalid filename"}), 400
         
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
-        pseudocode_dir = os.path.join(data_dir, job_id, "artifacts", "pseudocode")
-        refine_dir = os.path.join(data_dir, job_id, "artifacts", "refine")
+        pseudocode_dir = DATA_DIR / job_id / "artifacts" / "pseudocode"
+        refine_dir = DATA_DIR / job_id / "artifacts" / "refine"
         
-        pseudocode_file = os.path.join(pseudocode_dir, filename)
-        refined_file = os.path.join(refine_dir, filename)
+        pseudocode_file = _resolve_within_base(pseudocode_dir, filename)
+        refined_file = _resolve_within_base(refine_dir, filename)
         
-        if not os.path.exists(pseudocode_file):
+        if not pseudocode_file.exists():
             return jsonify({"error": "Pseudocode file not found"}), 404
         
-        if not os.path.exists(refined_file):
+        if not refined_file.exists():
             return jsonify({"error": "Refined file not found"}), 404
         
         with open(pseudocode_file, 'r', encoding='utf-8') as f:
@@ -2187,6 +2213,7 @@ def get_room_users(job_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/remote/api-keys', methods=['GET'])
+@admin_required
 def get_api_keys():
     return jsonify({
         "api_keys": list(VALID_API_KEYS),
@@ -2194,6 +2221,7 @@ def get_api_keys():
     })
 
 @app.route('/api/remote/api-keys', methods=['POST'])
+@admin_required
 def create_api_key():
     new_key = generate_api_key()
     VALID_API_KEYS.add(new_key)
@@ -2203,6 +2231,7 @@ def create_api_key():
     }), 201
 
 @app.route('/api/remote/api-keys/<key>', methods=['DELETE'])
+@admin_required
 def delete_api_key(key):
     if key in VALID_API_KEYS:
         VALID_API_KEYS.remove(key)
