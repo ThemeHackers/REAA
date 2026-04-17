@@ -3,7 +3,7 @@
 .env.local
 .env.*.local
 
-
+.well-known/
 .venv
 venv/
 ENV/

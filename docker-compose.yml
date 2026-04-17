@@ -25,6 +25,7 @@ services:
       dockerfile: Dockerfile
       platforms:
         - linux/amd64
+    image: reaa-ghidra-api
     container_name: ghidra-api
     restart: unless-stopped
     ports:
@@ -57,6 +58,7 @@ services:
       dockerfile: Dockerfile
       platforms:
         - linux/amd64
+    image: reaa-celery-worker
     container_name: ghidra-celery-worker
     restart: unless-stopped
     command: celery -A core.celery_app worker --loglevel=info --concurrency=5
@@ -87,6 +89,7 @@ services:
       dockerfile: Dockerfile
       platforms:
         - linux/amd64
+    image: reaa-celery-beat
     container_name: ghidra-celery-beat
     restart: unless-stopped
     command: celery -A core.celery_app beat --loglevel=info
