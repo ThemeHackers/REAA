@@ -172,35 +172,6 @@ reaa system gpu
 reaa system logs ghidra-api --lines 100
 ```
 
-## 🎨 Output Examples
-
-### Beautiful Tables
-```
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Jobs List                                                     ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ id              │ filename    │ status     │ created_at         │
-├────────────────────────────────────────────────────────────────┤
-│ abc123...       │ test.exe    │ completed  │ 2024-01-15 10:30  │
-│ def456...       │ malware.dll │ processing │ 2024-01-15 11:00  │
-└────────────────────────────────────────────────────────────────┘
-```
-
-### JSON Syntax Highlighting
-```json
-{
-  "job_id": "abc123...",
-  "status": "completed",
-  "filename": "test.exe"
-}
-```
-
-### Progress Indicators
-```
-⠋ Uploading binary...
-✓ Binary uploaded successfully
-```
-
 ## 🔍 Help
 
 ```bash
@@ -301,7 +272,3 @@ reaa analysis upload /absolute/path/to/binary.exe
 3. **Pipe output** - Can pipe JSON output to other tools
 4. **Save API key** - Set REAA_API_KEY environment variable for convenience
 5. **Check status first** - Always run `reaa status` before starting analysis
-
-## 📄 License
-
-Same as REAA project license.
