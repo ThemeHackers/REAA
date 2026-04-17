@@ -12,6 +12,7 @@ services:
       - ./frida_scripts:/app/frida_scripts:ro
       - ../data:/app/data:rw
       - ./artifacts:/app/artifacts:rw
+      - /tmp:/tmp:rw
     environment:
       - FRIDA_SCRIPTS_DIR=/app/frida_scripts
       - PYTHONUNBUFFERED=1
@@ -19,16 +20,17 @@ services:
     cpus: 2.0
     security_opt:
       - no-new-privileges:true
-    read_only: true
     tmpfs:
-      - /tmp:noexec,nosuid,size=100m
+      - /tmp:exec,nosuid,size=500m
+      - /run:exec,nosuid,size=100m
     cap_drop:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+      - NET_RAW
+      - SYS_PTRACE
     restart: unless-stopped
 
 networks:
   isolated:
     driver: bridge
-    internal: true

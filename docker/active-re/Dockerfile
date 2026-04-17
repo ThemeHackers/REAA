@@ -39,17 +39,22 @@ RUN pip3 install --no-cache-dir \
     pyelftools>=0.29 \
     psutil>=5.9.0 \
     pyshark>=0.4.5 \
-    websockets>=11.0.0
+    websockets>=11.0.0 \
+    pwndbg
 
 RUN mkdir -p /app/frida_scripts
 RUN mkdir -p /app/data
 RUN mkdir -p /app/artifacts
+
+RUN groupadd -r reuser && useradd -r -g reuser reuser
+RUN chown -R reuser:reuser /app
 
 WORKDIR /app
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import frida; print('Frida OK')" || exit 1
+    CMD curl -f http://localhost:8080 || exit 1
 
+USER reuser
 CMD ["python3", "-m", "http.server", "8080"]
