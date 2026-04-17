@@ -60,37 +60,73 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 │  │   WebUI     │─────▶│  FastAPI    │◀─────│  Celery     │ │
 │  │  (Flask)    │      │   (REST)    │      │  Worker      │ │
 │  │             │      │             │      └──────────────┘ │
-│  │  + Agents   │      │             │                     │
-│  └─────────────┘      └─────────────┘                     │
-│       │                    │                                 │
-│       │                    │                                 │
-│       ▼                    ▼                                 │
-│  ┌─────────────┐      ┌─────────────┐                     │
-│  │   Redis     │      │  Radare2    │                     │
-│  │  (Broker)   │      │  (CLI)      │                     │
-│  └─────────────┘      └─────────────┘                     │
+│  │  + Agents   │      │             │                       │
+│  └─────────────┘      └─────────────┘                       │
+│       │                    │                                │
+│       │                    │                                │
+│       ▼                    ▼                                │
+│  ┌─────────────┐      ┌─────────────┐                       │
+│  │   Redis     │      │  Radare2    │                       │
+│  │  (Broker)   │      │  (CLI)      │                       │
+│  └─────────────┘      └─────────────┘                       │
 └─────────────────────────────────────────────────────────────┘
         │
         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              Active RE Docker Sandbox (NEW)                 │
+│              Active RE Docker Sandbox                  │
 │  ┌─────────────┐      ┌─────────────┐      ┌──────────────┐ │
 │  │   Frida     │      │    angr     │      │   pwndbg     │ │
 │  │ Instrument  │      │  Symbolic   │      │  Enhanced    │ │
 │  └─────────────┘      └─────────────┘      │  Debugging   │ │
-│                                             └──────────────┘ │
-│  ┌─────────────┐      ┌─────────────┐                      │
-│  │   Procmon   │      │  Wireshark  │                      │
-│  │  Monitor    │      │  Capture    │                      │
-│  └─────────────┘      └─────────────┘                      │
-│  ┌───────────────────────────────────────────────────────┐ │
-│  │              Vector Database (ChromaDB)                 │ │
-│  │              RAG System + Knowledge Base                │ │
-│  └───────────────────────────────────────────────────────┘ │
+│                                            └──────────────┘ │
+│  ┌─────────────┐      ┌─────────────┐                       │
+│  │   Procmon   │      │  Wireshark  │                       │
+│  │  Monitor    │      │  Capture    │                       │
+│  └─────────────┘      └─────────────┘                       │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │              Vector Database (ChromaDB)               │  │
+│  │              RAG System + Knowledge Base              │  │ 
+│  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## 📦 Installation
+
+### Quick Installation (Windows)
+
+**Recommended for Windows users** - Run the automated setup script:
+
+```bash
+# Run the automated setup script
+python setup.py
+```
+
+The setup script will automatically:
+- Check Python version and create virtual environment
+- Check Visual C++ Build Tools (required for some packages)
+- Install Python dependencies from requirements.txt
+- Install PyTorch with CUDA for GPU support
+- Check Docker installation
+- Configure .env file from .env.example
+- Build and start Docker containers
+- Install Ollama and pull llama3.2:3b model
+- Install Hugging Face CLI
+
+**If any step fails**, the script will continue and show troubleshooting steps at the end. You can then:
+- Fix the specific issue and run `python setup.py` again, or
+- Follow the manual installation steps below for that specific component
+
+**After setup completes:**
+1. Edit `.env` file with your settings (if not already done)
+2. Start Ollama server in a new terminal: `ollama serve`
+3. Run the application: `python webui\app.py`
+4. Access WebUI at: http://127.0.0.1:5000
+
+---
+
+### Manual Installation (Alternative)
+
+If you prefer manual installation or need to troubleshoot specific issues:
 
 ### Prerequisites
 - Docker and Docker Compose
@@ -208,8 +244,15 @@ Available models for decompilation refinement:
 - **Ollama**: llama3.2:3b or qwen3.5:4b
 - **LLM4Decompile**: llm4decompile-1.3b-v2 or llm4decompile-6.7b-v2
 
-### Quick Start
+### Quick Start (After Installation)
 
+**If you used `python setup.py`:**
+1. Edit `.env` file with your settings (if not already done)
+2. Start Ollama server in a new terminal: `ollama serve`
+3. Run the application: `python webui\app.py`
+4. Access WebUI at: http://127.0.0.1:5000
+
+**If you used manual installation:**
 1. **Clone repository**:
 ```bash
 git clone https://github.com/Themehackers/REAA
@@ -239,8 +282,7 @@ docker-compose up -d
 ```
 
 5. **Run app.py**
-
-```
+```bash
 python webui/app.py
 ```
 
@@ -364,7 +406,7 @@ Each analysis generates comprehensive artifacts:
 - **Selective Refine**: Choose specific files to refine
 - **LLM Integration**: Uses llm4decompile model
 
-### Active Reverse Engineering (NEW)
+### Active Reverse Engineering 
 - **Execution Planning**: Plan dynamic analysis strategies
 - **Sandbox Execution**: Run binaries in isolated Docker containers
 - **Frida Scripts**: Use pre-defined or custom Frida instrumentation
@@ -444,7 +486,7 @@ Each analysis generates comprehensive artifacts:
 - `GET /gpu/detailed` - Detailed GPU info
 - `GET /api/remote/health` - Remote collaboration health
 
-### Active Reverse Engineering (NEW)
+### Active Reverse Engineering 
 - `POST /api/active-re/plan` - Plan Active RE execution strategy
 - `POST /api/active-re/execute` - Execute binary with Frida instrumentation
 - `POST /api/active-re/monitor` - Monitor binary execution
