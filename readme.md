@@ -439,6 +439,9 @@ Each analysis generates comprehensive artifacts:
 - `DELETE /api/jobs/{job_id}` - Delete job
 - `GET /api/jobs/{job_id}/download` - Download job artifacts
 - `POST /api/jobs/cleanup` - Clean up old jobs
+- `GET /api/jobs/{job_id}/functions` - List job functions
+- `GET /api/jobs/{job_id}/strings` - List job strings
+- `GET /api/jobs/{job_id}/imports` - List job imports
 
 ### Chat & AI
 - `POST /chat` - Send chat message
@@ -459,6 +462,12 @@ Each analysis generates comprehensive artifacts:
 
 ### Results & Visualization
 - `GET /api/jobs/{job_id}/memory` - Get memory layout
+- `GET /api/jobs/{job_id}/memory/<section_name>/hex` - Get hex dump of memory section
+- `GET /api/jobs/{job_id}/memory/analysis` - Memory analysis
+- `GET /api/jobs/{job_id}/memory/strings` - Extract strings from memory
+- `GET /api/jobs/{job_id}/memory/<address>/xref` - Get cross-references for address
+- `GET /api/jobs/{job_id}/memory/compare/<section1>/<section2>` - Compare memory sections
+- `POST /api/jobs/{job_id}/memory/pattern/search` - Search for byte patterns
 
 ### Radare2 Integration
 - `GET /api/r2/status` - Radare2 status
@@ -477,6 +486,18 @@ Each analysis generates comprehensive artifacts:
 - `POST /api/r2/disasm/range` - Disassemble range
 - `POST /api/r2/disasm/graph` - Get disassembly graph
 - `POST /api/asm/analyze` - Analyze assembly
+- `POST /api/r2/test` - Test Radare2 connection
+
+### Additional Endpoints
+- `POST /api/settings` - Update settings
+- `GET /api/models` - List available models
+- `GET /api/models/current` - Get current model
+- `POST /api/models/switch` - Switch model
+- `POST /api/models/test` - Test model
+- `POST /api/models/config` - Configure model
+- `GET /api/graph/{job_id}` - Get graph visualization
+- `GET /api/jobs/{job_id}/diff/<filename>` - Get diff for pseudocode file
+- `GET /pseudocode` - Pseudocode page
 
 ### System & Monitoring
 - `GET /api/system/status` - System status
@@ -484,7 +505,15 @@ Each analysis generates comprehensive artifacts:
 - `GET /api/docker/logs/{container_name}` - Docker container logs
 - `GET /gpu/status` - GPU status
 - `GET /gpu/detailed` - Detailed GPU info
+
+### Remote Collaboration
 - `GET /api/remote/health` - Remote collaboration health
+- `GET /api/remote/server/status` - Remote server status
+- `GET /api/remote/jobs` - List remote jobs
+- `GET /api/remote/room/{job_id}/users` - Get users in remote room
+- `GET /api/remote/api-keys` - List API keys
+- `POST /api/remote/api-keys` - Create API key
+- `DELETE /api/remote/api-keys/{key}` - Delete API key
 
 ### Active Reverse Engineering 
 - `POST /api/active-re/plan` - Plan Active RE execution strategy
