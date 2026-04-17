@@ -1,5 +1,7 @@
 # REAA - Reverse Engineering Analysis Assistant
 
+
+
 AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced analysis tools for malware analysis and security research.
 
 ## 🚀 Features
@@ -457,8 +459,6 @@ Each analysis generates comprehensive artifacts:
 
 ### Results & Visualization
 - `GET /api/jobs/{job_id}/memory` - Get memory layout
-- `GET /api/jobs/{job_id}/callgraph` - Get call graph
-- `GET /api/jobs/{job_id}/controlflow/{function_address}` - Get control flow
 
 ### Radare2 Integration
 - `GET /api/r2/status` - Radare2 status
