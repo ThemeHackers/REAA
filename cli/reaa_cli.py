@@ -9,20 +9,44 @@ import os
 import sys
 import json
 import requests
+import getpass
+import keyring
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
 from rich.prompt import Prompt, Confirm
 from rich.syntax import Syntax
 from rich.markdown import Markdown
+from rich.tree import Tree
+from rich.columns import Columns
+from rich.align import Align
+from rich.text import Text
 from rich import print as rprint
+from rich.theme import Theme
 import typer
+from datetime import datetime
 
-# Initialize Rich Console
-console = Console()
+# Custom Theme for Beautiful UI
+custom_theme = Theme({
+    "info": "cyan",
+    "warning": "yellow",
+    "error": "bold red",
+    "success": "bold green",
+    "title": "bold magenta",
+    "subtitle": "italic cyan",
+    "border": "blue",
+    "highlight": "reverse cyan",
+    "path": "dim cyan",
+    "number": "bold yellow",
+    "string": "green",
+    "key": "bold blue",
+})
+
+# Initialize Rich Console with custom theme
+console = Console(theme=custom_theme)
 
 # API Configuration
 API_BASE_URL = os.getenv("REAA_API_URL", "http://127.0.0.1:5000")
@@ -56,49 +80,119 @@ app.add_typer(radare2_app, name="r2", help="Radare2 commands")
 app.add_typer(system_app, name="system", help="System commands")
 
 
+class SecureStorage:
+    """Secure storage for API keys using keyring"""
+    
+    SERVICE_NAME = "reaa-cli"
+    
+    @staticmethod
+    def save_api_key(api_key: str) -> bool:
+        """Securely save API key to system keyring"""
+        try:
+            keyring.set_password(SecureStorage.SERVICE_NAME, "api_key", api_key)
+            return True
+        except Exception as e:
+            console.print(f"[error]Failed to save API key securely: {e}[/error]")
+            return False
+    
+    @staticmethod
+    def get_api_key() -> Optional[str]:
+        """Retrieve API key from system keyring"""
+        try:
+            return keyring.get_password(SecureStorage.SERVICE_NAME, "api_key")
+        except Exception as e:
+            console.print(f"[warning]Failed to retrieve API key: {e}[/warning]")
+            return None
+    
+    @staticmethod
+    def delete_api_key() -> bool:
+        """Delete API key from system keyring"""
+        try:
+            keyring.delete_password(SecureStorage.SERVICE_NAME, "api_key")
+            return True
+        except Exception as e:
+            console.print(f"[warning]Failed to delete API key: {e}[/warning]")
+            return False
+
+
 class APIClient:
-    """API Client for REAA"""
+    """API Client for REAA with security features"""
     
     def __init__(self, base_url: str = API_BASE_URL, api_key: str = API_KEY):
-        self.base_url = base_url
-        self.api_key = api_key
-        self.headers = {}
-        if api_key:
-            self.headers["Authorization"] = f"Bearer {api_key}"
+        self.base_url = base_url.rstrip('/')
+        self.api_key = api_key or SecureStorage.get_api_key() or ""
+        self.headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "REAA-CLI/1.0.0"
+        }
+        if self.api_key:
+            self.headers["Authorization"] = f"Bearer {self.api_key}"
     
     def get(self, endpoint: str, params: Optional[Dict] = None) -> Dict[str, Any]:
-        """GET request"""
+        """GET request with timeout and error handling"""
         try:
-            response = requests.get(f"{self.base_url}{endpoint}", headers=self.headers, params=params)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            console.print(f"[red]Error: {e}[/red]")
-            return {"error": str(e)}
-    
-    def post(self, endpoint: str, data: Optional[Dict] = None, files: Optional[Dict] = None) -> Dict[str, Any]:
-        """POST request"""
-        try:
-            response = requests.post(
+            response = requests.get(
                 f"{self.base_url}{endpoint}",
                 headers=self.headers,
-                json=data,
-                files=files
+                params=params,
+                timeout=30
             )
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.Timeout:
+            console.print("[error]Request timed out. Please try again.[/error]")
+            return {"error": "Request timeout"}
+        except requests.exceptions.ConnectionError:
+            console.print("[error]Cannot connect to API. Check if the server is running.[/error]")
+            return {"error": "Connection error"}
         except requests.exceptions.RequestException as e:
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[error]Request failed: {e}[/error]")
+            return {"error": str(e)}
+    
+    def post(self, endpoint: str, data: Optional[Dict] = None, files: Optional[Dict] = None) -> Dict[str, Any]:
+        """POST request with timeout and error handling"""
+        try:
+            headers = self.headers.copy()
+            if files:
+                headers.pop("Content-Type", None)  # Let requests set it for multipart
+            
+            response = requests.post(
+                f"{self.base_url}{endpoint}",
+                headers=headers,
+                json=data,
+                files=files,
+                timeout=300  # Longer timeout for file uploads
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.Timeout:
+            console.print("[error]Request timed out. Please try again.[/error]")
+            return {"error": "Request timeout"}
+        except requests.exceptions.ConnectionError:
+            console.print("[error]Cannot connect to API. Check if the server is running.[/error]")
+            return {"error": "Connection error"}
+        except requests.exceptions.RequestException as e:
+            console.print(f"[error]Request failed: {e}[/error]")
             return {"error": str(e)}
     
     def delete(self, endpoint: str) -> Dict[str, Any]:
-        """DELETE request"""
+        """DELETE request with timeout and error handling"""
         try:
-            response = requests.delete(f"{self.base_url}{endpoint}", headers=self.headers)
+            response = requests.delete(
+                f"{self.base_url}{endpoint}",
+                headers=self.headers,
+                timeout=30
+            )
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.Timeout:
+            console.print("[error]Request timed out. Please try again.[/error]")
+            return {"error": "Request timeout"}
+        except requests.exceptions.ConnectionError:
+            console.print("[error]Cannot connect to API. Check if the server is running.[/error]")
+            return {"error": "Connection error"}
         except requests.exceptions.RequestException as e:
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[error]Request failed: {e}[/error]")
             return {"error": str(e)}
 
 
@@ -106,59 +200,100 @@ class APIClient:
 api_client = APIClient()
 
 
-def print_header(title: str, subtitle: str = ""):
-    """Print beautiful header"""
-    console.print(Panel(
-        f"[bold cyan]{title}[/bold cyan]\n{subtitle}" if subtitle else f"[bold cyan]{title}[/bold cyan]",
-        border_style="cyan",
-        padding=(1, 2)
-    ))
+def print_header(title: str, subtitle: str = "", emoji: str = "🔧"):
+    """Print beautiful header with emoji and styling"""
+    title_text = Text(f"{emoji} {title}", style="title")
+    if subtitle:
+        content = Columns([
+            Align.center(title_text),
+            Align.center(Text(subtitle, style="subtitle"))
+        ])
+    else:
+        content = Align.center(title_text)
+    
+    panel = Panel(
+        content,
+        border_style="border",
+        padding=(1, 3),
+        title="[bold]REAA CLI[/bold]",
+        title_align="center"
+    )
+    console.print(panel)
 
 
-def print_table(data: List[Dict], title: str = ""):
-    """Print data as beautiful table"""
+def print_table(data: List[Dict], title: str = "", show_count: bool = True):
+    """Print data as beautiful table with styling"""
     if not data:
-        console.print("[yellow]No data to display[/yellow]")
+        console.print("[warning]⚠ No data to display[/warning]")
         return
     
-    table = Table(title=title, show_header=True, header_style="bold magenta")
+    table = Table(
+        title=title if title else None,
+        show_header=True,
+        header_style="bold magenta",
+        title_style="title",
+        title_justify="center",
+        padding=(0, 1)
+    )
     
-    # Add columns from first item
+    # Add columns from first item with styling
     for key in data[0].keys():
-        table.add_column(key, style="cyan", overflow="fold")
+        table.add_column(
+            key.replace("_", " ").title(),
+            style="cyan",
+            overflow="fold",
+            max_width=50
+        )
     
-    # Add rows
-    for item in data:
+    # Add rows with alternating row styles
+    for i, item in enumerate(data):
+        row_style = "" if i % 2 == 0 else "dim"
         table.add_row(*[str(v) for v in item.values()])
     
     console.print(table)
+    
+    if show_count:
+        console.print(f"[info]ℹ Total: {len(data)} items[/info]\n")
 
 
 def print_json(data: Dict[str, Any], title: str = ""):
-    """Print data as formatted JSON"""
+    """Print data as formatted JSON with syntax highlighting"""
     if title:
-        console.print(f"[bold green]{title}[/bold green]")
-    console.print(Syntax(json.dumps(data, indent=2), "json", theme="monokai"))
+        console.print(f"\n[title]📄 {title}[/title]\n")
+    
+    json_str = json.dumps(data, indent=2, ensure_ascii=False)
+    syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
+    console.print(syntax)
 
 
 def print_success(message: str):
-    """Print success message"""
-    console.print(f"[green]✓[/green] {message}")
+    """Print success message with emoji"""
+    console.print(f"[success]✓ {message}[/success]")
 
 
 def print_error(message: str):
-    """Print error message"""
-    console.print(f"[red]✗[/red] {message}")
+    """Print error message with emoji"""
+    console.print(f"[error]✗ {message}[/error]")
 
 
 def print_warning(message: str):
-    """Print warning message"""
-    console.print(f"[yellow]⚠[/yellow] {message}")
+    """Print warning message with emoji"""
+    console.print(f"[warning]⚠ {message}[/warning]")
 
 
 def print_info(message: str):
-    """Print info message"""
-    console.print(f"[blue]ℹ[/blue] {message}")
+    """Print info message with emoji"""
+    console.print(f"[info]ℹ {message}[/info]")
+
+
+def print_step(step: int, total: int, message: str):
+    """Print step indicator"""
+    console.print(f"[info]Step {step}/{total}:[/info] {message}")
+
+
+def print_separator(char: str = "─", length: int = 50):
+    """Print separator line"""
+    console.print(f"[dim]{char * length}[/dim]")
 
 
 # ============== ROOT COMMANDS ==============
@@ -195,10 +330,14 @@ def status():
 @app.command()
 def config(
     url: Optional[str] = typer.Option(None, "--url", "-u", help="API base URL"),
-    key: Optional[str] = typer.Option(None, "--key", "-k", help="API key")
+    key: Optional[str] = typer.Option(None, "--key", "-k", help="API key"),
+    save_key: bool = typer.Option(False, "--save", "-s", help="Save API key securely to system keyring"),
+    remove_key: bool = typer.Option(False, "--remove", "-r", help="Remove API key from system keyring")
 ):
-    """Configure CLI settings"""
+    """Configure CLI settings with secure storage support"""
     global api_client, API_BASE_URL, API_KEY
+    
+    print_header("Configuration", emoji="⚙️")
     
     if url:
         API_BASE_URL = url
@@ -208,12 +347,38 @@ def config(
     if key:
         API_KEY = key
         api_client = APIClient(API_BASE_URL, API_KEY)
-        print_success("API key updated")
+        print_success("API key updated (session only)")
+        
+        if save_key:
+            if SecureStorage.save_api_key(key):
+                print_success("API key saved securely to system keyring")
+            else:
+                print_warning("Failed to save API key securely")
     
-    if not url and not key:
-        print_header("Current Configuration")
+    if remove_key:
+        if SecureStorage.delete_api_key():
+            print_success("API key removed from system keyring")
+            API_KEY = ""
+            api_client = APIClient(API_BASE_URL, API_KEY)
+        else:
+            print_warning("No API key in system keyring")
+    
+    if not url and not key and not save_key and not remove_key:
+        print_separator()
         console.print(f"[bold]API URL:[/bold] {API_BASE_URL}")
-        console.print(f"[bold]API Key:[/bold] {'*' * len(API_KEY) if API_KEY else 'Not set'}")
+        
+        # Check secure storage
+        secure_key = SecureStorage.get_api_key()
+        if secure_key:
+            console.print(f"[bold]API Key (Secure Storage):[/bold] {'*' * 20}")
+        elif API_KEY:
+            console.print(f"[bold]API Key (Session):[/bold] {'*' * len(API_KEY)}")
+        else:
+            console.print("[bold]API Key:[/bold] Not set")
+        
+        print_separator()
+        print_info("Use --save to store API key securely")
+        print_info("Use --remove to remove stored API key")
 
 
 # ============== AUTHENTICATION COMMANDS ==============
@@ -384,9 +549,16 @@ def download_job(
     output: str = typer.Option(".", "--output", "-o", help="Output directory")
 ):
     """Download job artifacts"""
-    print_header(f"Download Job: {job_id}")
+    print_header(f"Download Job: {job_id}", emoji="📥")
     
-    result = api_client.get(f"/api/jobs/{job_id}/download")
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console
+    ) as progress:
+        task = progress.add_task("Downloading job artifacts...", total=None)
+        result = api_client.get(f"/api/jobs/{job_id}/download")
+        progress.remove_task(task)
     
     if "error" not in result:
         output_path = Path(output) / f"analysis_results_{job_id[:8]}.zip"
@@ -395,6 +567,127 @@ def download_job(
         print_success(f"Downloaded to: {output_path}")
     else:
         print_error("Failed to download job")
+
+
+@analysis_app.command("memory")
+def job_memory(
+    job_id: str = typer.Argument(..., help="Job ID")
+):
+    """Get memory layout for job"""
+    print_header(f"Memory Layout: {job_id}", emoji="🧠")
+    
+    result = api_client.get(f"/api/jobs/{job_id}/memory")
+    
+    if "error" not in result:
+        print_json(result, "Memory Layout")
+    else:
+        print_error("Failed to get memory layout")
+
+
+@analysis_app.command("memory-hex")
+def job_memory_hex(
+    job_id: str = typer.Argument(..., help="Job ID"),
+    section_name: str = typer.Argument(..., help="Memory section name")
+):
+    """Get hex dump of memory section"""
+    print_header(f"Memory Hex: {job_id} - {section_name}", emoji="📊")
+    
+    result = api_client.get(f"/api/jobs/{job_id}/memory/{section_name}/hex")
+    
+    if "error" not in result:
+        print_json(result, "Memory Hex Dump")
+    else:
+        print_error("Failed to get memory hex")
+
+
+@analysis_app.command("memory-analysis")
+def job_memory_analysis(
+    job_id: str = typer.Argument(..., help="Job ID")
+):
+    """Get memory analysis for job"""
+    print_header(f"Memory Analysis: {job_id}", emoji="🔍")
+    
+    result = api_client.get(f"/api/jobs/{job_id}/memory/analysis")
+    
+    if "error" not in result:
+        print_json(result, "Memory Analysis")
+    else:
+        print_error("Failed to get memory analysis")
+
+
+@analysis_app.command("memory-strings")
+def job_memory_strings(
+    job_id: str = typer.Argument(..., help="Job ID")
+):
+    """Extract strings from memory"""
+    print_header(f"Memory Strings: {job_id}", emoji="📝")
+    
+    result = api_client.get(f"/api/jobs/{job_id}/memory/strings")
+    
+    if "error" not in result:
+        if "strings" in result:
+            print_table(result["strings"], "Memory Strings", show_count=False)
+        else:
+            print_json(result, "Memory Strings")
+    else:
+        print_error("Failed to get memory strings")
+
+
+@analysis_app.command("memory-xref")
+def job_memory_xref(
+    job_id: str = typer.Argument(..., help="Job ID"),
+    address: str = typer.Argument(..., help="Memory address")
+):
+    """Get cross-references for address"""
+    print_header(f"Cross-References: {job_id} - {address}", emoji="🔗")
+    
+    result = api_client.get(f"/api/jobs/{job_id}/memory/{address}/xref")
+    
+    if "error" not in result:
+        print_json(result, "Cross-References")
+    else:
+        print_error("Failed to get cross-references")
+
+
+@analysis_app.command("memory-compare")
+def job_memory_compare(
+    job_id: str = typer.Argument(..., help="Job ID"),
+    section1: str = typer.Argument(..., help="First section name"),
+    section2: str = typer.Argument(..., help="Second section name")
+):
+    """Compare memory sections"""
+    print_header(f"Memory Compare: {section1} vs {section2}", emoji="⚖️")
+    
+    result = api_client.get(f"/api/jobs/{job_id}/memory/compare/{section1}/{section2}")
+    
+    if "error" not in result:
+        print_json(result, "Memory Comparison")
+    else:
+        print_error("Failed to compare memory sections")
+
+
+@analysis_app.command("memory-search")
+def job_memory_search(
+    job_id: str = typer.Argument(..., help="Job ID"),
+    pattern: str = typer.Argument(..., help="Byte pattern to search (hex)"),
+    offset: Optional[int] = typer.Option(None, "--offset", "-o", help="Start offset")
+):
+    """Search for byte patterns in memory"""
+    print_header(f"Memory Pattern Search: {job_id}", emoji="🔎")
+    
+    data = {
+        "job_id": job_id,
+        "pattern": pattern
+    }
+    if offset is not None:
+        data["offset"] = offset
+    
+    result = api_client.post(f"/api/jobs/{job_id}/memory/pattern/search", data=data)
+    
+    if "error" not in result:
+        print_json(result, "Pattern Search Results")
+    else:
+        print_error("Failed to search memory patterns")
 
 
 # ============== SECURITY ANALYSIS COMMANDS ==============
@@ -781,7 +1074,7 @@ def docker_logs(
     lines: int = typer.Option(50, "--lines", "-n", help="Number of lines")
 ):
     """Get Docker container logs"""
-    print_header(f"Docker Logs: {container_name}")
+    print_header(f"Docker Logs: {container_name}", emoji="📋")
     
     result = api_client.get(f"/api/docker/logs/{container_name}", params={"lines": lines})
     
@@ -789,6 +1082,171 @@ def docker_logs(
         console.print(Syntax(result.get("logs", ""), "log"))
     else:
         print_error("Failed to get logs")
+
+
+# ============== ADDITIONAL ENDPOINTS ==============
+
+@app.command("settings")
+def settings(
+    setting_key: Optional[str] = typer.Option(None, "--key", "-k", help="Setting key"),
+    setting_value: Optional[str] = typer.Option(None, "--value", "-v", help="Setting value")
+):
+    """Update or view settings"""
+    print_header("Settings", emoji="⚙️")
+    
+    if setting_key and setting_value:
+        data = {setting_key: setting_value}
+        result = api_client.post("/api/settings", data=data)
+        if "error" not in result:
+            print_success(f"Setting {setting_key} updated")
+        else:
+            print_error("Failed to update setting")
+    else:
+        print_info("Use --key and --value to update settings")
+
+
+@app.command("models")
+def models(
+    action: str = typer.Option("list", "--action", "-a", help="Action: list, current, switch, test, config")
+):
+    """Manage AI models"""
+    print_header("AI Models", emoji="🤖")
+    
+    if action == "list":
+        result = api_client.get("/api/models")
+        if "error" not in result:
+            print_table(result.get("models", []), "Available Models")
+        else:
+            print_error("Failed to get models")
+    elif action == "current":
+        result = api_client.get("/api/models/current")
+        if "error" not in result:
+            print_json(result, "Current Model")
+        else:
+            print_error("Failed to get current model")
+    else:
+        print_info("Actions: list, current, switch, test, config")
+
+
+@app.command("graph")
+def graph(
+    job_id: str = typer.Argument(..., help="Job ID")
+):
+    """Get graph visualization for job"""
+    print_header(f"Graph Visualization: {job_id}", emoji="📈")
+    
+    result = api_client.get(f"/api/graph/{job_id}")
+    
+    if "error" not in result:
+        print_json(result, "Graph Data")
+    else:
+        print_error("Failed to get graph")
+
+
+# ============== REMOTE COLLABORATION COMMANDS ==============
+
+remote_app = typer.Typer(help="Remote collaboration commands")
+app.add_typer(remote_app, name="remote", help="Remote collaboration commands")
+
+
+@remote_app.command("health")
+def remote_health():
+    """Check remote collaboration health"""
+    print_header("Remote Collaboration Health", emoji="🌐")
+    
+    result = api_client.get("/api/remote/health")
+    
+    if "error" not in result:
+        print_json(result, "Remote Health Status")
+    else:
+        print_error("Failed to get remote health")
+
+
+@remote_app.command("server-status")
+def remote_server_status():
+    """Get remote server status"""
+    print_header("Remote Server Status", emoji="🖥️")
+    
+    result = api_client.get("/api/remote/server/status")
+    
+    if "error" not in result:
+        print_json(result, "Server Status")
+    else:
+        print_error("Failed to get server status")
+
+
+@remote_app.command("jobs")
+def remote_jobs():
+    """List remote jobs"""
+    print_header("Remote Jobs", emoji="📋")
+    
+    result = api_client.get("/api/remote/jobs")
+    
+    if "error" not in result:
+        print_table(result.get("jobs", []), "Remote Jobs")
+    else:
+        print_error("Failed to get remote jobs")
+
+
+@remote_app.command("room-users")
+def remote_room_users(
+    job_id: str = typer.Argument(..., help="Job ID")
+):
+    """Get users in remote room"""
+    print_header(f"Room Users: {job_id}", emoji="👥")
+    
+    result = api_client.get(f"/api/remote/room/{job_id}/users")
+    
+    if "error" not in result:
+        print_table(result.get("users", []), "Room Users")
+    else:
+        print_error("Failed to get room users")
+
+
+@remote_app.command("api-keys")
+def remote_api_keys():
+    """List remote API keys"""
+    print_header("Remote API Keys", emoji="🔑")
+    
+    result = api_client.get("/api/remote/api-keys")
+    
+    if "error" not in result:
+        print_table(result.get("api_keys", []), "API Keys")
+    else:
+        print_error("Failed to get API keys")
+
+
+@remote_app.command("create-key")
+def remote_create_key():
+    """Create new remote API key"""
+    print_header("Create API Key", emoji="🔑")
+    
+    result = api_client.post("/api/remote/api-keys")
+    
+    if "error" not in result:
+        print_success("API key created")
+        print_json(result, "New API Key")
+    else:
+        print_error("Failed to create API key")
+
+
+@remote_app.command("delete-key")
+def remote_delete_key(
+    key: str = typer.Argument(..., help="API key to delete")
+):
+    """Delete remote API key"""
+    print_header(f"Delete API Key", emoji="🔑")
+    
+    if not Confirm.ask(f"Are you sure you want to delete key {key[:10]}...?"):
+        print_info("Operation cancelled")
+        return
+    
+    result = api_client.delete(f"/api/remote/api-keys/{key}")
+    
+    if "error" not in result:
+        print_success("API key deleted")
+    else:
+        print_error("Failed to delete API key")
 
 
 if __name__ == "__main__":
