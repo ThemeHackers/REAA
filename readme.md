@@ -382,6 +382,8 @@ Each analysis generates comprehensive artifacts:
 
 REAA includes a beautiful Command Line Interface (CLI) tool for interacting with all API endpoints directly from the terminal.
 
+For detailed CLI documentation, see [cli/README.md](cli/README.md)
+
 ### Installation
 
 ```bash
