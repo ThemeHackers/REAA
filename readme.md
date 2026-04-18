@@ -1,6 +1,6 @@
 # REAA - Reverse Engineering Analysis Assistant
 
-
+> **⚠️ Platform Support**: This project is designed primarily for **Windows** with **local deployment**. While Docker containers are used for some components, the main focus is on Windows-native execution and local AI model integration.
 
 AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced analysis tools for malware analysis and security research.
 
@@ -100,6 +100,8 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 
 ```bash
 # Run the automated setup script
+python -m venv .venv
+.venv\Scripts\activate
 python setup.py
 ```
 
@@ -328,7 +330,7 @@ ADMIN_EMAIL='It's up to you'
 ADMIN_PASSWORD='It's up to you'
 
 ACTIVE_RE_ENABLED=true
-ACTIVE_RE_SANDBOX_IMAGE=reaa/active-re:latest
+ACTIVE_RE_SANDBOX_IMAGE=reaa/active-re-linux:latest
 ACTIVE_RE_NETWORK_MODE=bridge
 ACTIVE_RE_NETWORK_ISOLATED=true
 ACTIVE_RE_TIMEOUT=300
@@ -612,7 +614,7 @@ For detailed documentation, see [cli/README.md](cli/README.md)
 - `POST /api/rag/similar-functions` - Find similar functions
 - `POST /api/rag/vulnerabilities` - Search vulnerability patterns
 
-## ️ Troubleshooting
+## 🛠️ Troubleshooting
 
 ### AI Model Issues
 
@@ -661,7 +663,7 @@ docker-compose logs celery-worker
 docker-compose restart celery-worker
 ```
 
-## � Active Reverse Engineering Usage
+## 🚀 Active Reverse Engineering Usage
 
 ### Starting Active RE Analysis
 
@@ -778,7 +780,7 @@ curl -X POST http://127.0.0.1:5000/api/report/generate \
   }'
 ```
 
-## �📚 Additional Resources
+## Additional Resources
 
 - [Ghidra Documentation](https://ghidra-sre.org/)
 - [PyGhidra Documentation](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)

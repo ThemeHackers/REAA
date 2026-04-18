@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = ""
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""
+    GHIDRA_API_KEY: str = ""
+    CORE_API_KEYS: str = ""
 
     GHIDRA_HOME: str = "/opt/ghidra"
     GHIDRA_VERSION: str = "12.0.4"
@@ -55,7 +57,8 @@ class Settings(BaseSettings):
     LLM4DECOMPILE_TOP_K: int = 50
 
     ACTIVE_RE_ENABLED: bool = True
-    ACTIVE_RE_SANDBOX_IMAGE: str = "reaa/active-re:latest"
+    ACTIVE_RE_SANDBOX_IMAGE: str = "reaa/active-re-linux:latest"
+    ACTIVE_RE_WINDOWS_IMAGE: str = "reaa/active-re-windows:latest"
     ACTIVE_RE_NETWORK_MODE: str = "bridge"
     ACTIVE_RE_NETWORK_ISOLATED: bool = True
     ACTIVE_RE_TIMEOUT: int = 300
