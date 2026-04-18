@@ -41,7 +41,7 @@ custom_theme = Theme({
 
 console = Console(theme=custom_theme)
 
-API_BASE_URL = os.getenv("REAA_API_URL", "http://127.0.0.1:5000")
+API_BASE_URL = os.getenv("REAA_API_URL", "http://127.0.0.1:8000")
 API_KEY = os.getenv("REAA_API_KEY", "")
 
 app = typer.Typer(
