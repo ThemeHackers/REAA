@@ -52,7 +52,7 @@ reaa config --key your-api-key-here
 
 ```bash
 # Run CLI with python (before installation)
-python reaa_cli.py --help
+python reaa.py --help
 
 # After installation, use reaa directly
 reaa --help

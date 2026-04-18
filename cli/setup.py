@@ -6,7 +6,7 @@ setup(
     description="REAA - Reverse Engineering Analysis Assistant CLI",
     author="REAA Team",
     packages=[],
-    py_modules=["reaa_cli"],
+    py_modules=["reaa"],
     install_requires=[
         "typer>=0.9.0",
         "rich>=13.0.0",
@@ -15,7 +15,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "reaa=reaa_cli:app",
+            "reaa=reaa:app",
         ],
     },
     python_requires=">=3.8",

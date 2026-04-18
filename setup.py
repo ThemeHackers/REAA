@@ -597,7 +597,7 @@ def install_huggingface_cli_tool():
             console.print(f"[red]Error: {e}[/red]")
             console.print("You can install it later in PowerShell: irm https://hf.co/cli/install.ps1 | iex")
 
-def install_reaa_cli():
+def install_reaa():
     print_step(15, 15, "Installing REAA CLI...")
     venv_python = Path(".venv/Scripts/python.exe")
     cli_dir = Path("cli")
@@ -712,7 +712,7 @@ def main():
     ollama_cmd = install_ollama_runtime()
     download_ollama_model(ollama_cmd)
     install_huggingface_cli_tool()
-    install_reaa_cli()
+    install_reaa()
     
     log_with_error_scan("="*80, 'INFO')
     log_with_error_scan("Setup completed successfully", 'INFO')
