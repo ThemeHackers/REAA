@@ -37,13 +37,13 @@ webui/chats/
 
 data/
 instance/
-
+RD/
 dist/
 build/
 *.egg-info/
 .eggs/
 
-
+.session.json
 .dockerignore
 
 *.gpr

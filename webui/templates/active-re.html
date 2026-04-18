@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Active Reverse Engineering - REAA</title>
+    <script src="{{ url_for('static', filename='css/libs/tailwind.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/libs/jquery.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/libs/atom-one-dark.min.css') }}">
+    <script src="{{ url_for('static', filename='js/libs/highlight.min.js') }}"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        .btn-action {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        }
+    </style>
+</head>
+<body class="text-gray-200">
+    <div class="container mx-auto px-4 py-8">
+     
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Active Reverse Engineering</h1>
+            <a href="/" class="text-indigo-400 hover:text-indigo-300 transition">← Back to Dashboard</a>
+        </div>
+
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Select Job</h2>
+            <div class="flex gap-4">
+                <select id="job-select" class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                    <option value="">-- Select a job --</option>
+                </select>
+                <button id="load-job-btn" class="btn-action px-6 py-3 rounded-lg font-medium text-white">
+                    Load Job
+                </button>
+            </div>
+        </div>
+
+     
+        <div id="job-info" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Job Information</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-gray-400 text-sm">Job ID</p>
+                    <p id="job-id" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Filename</p>
+                    <p id="job-filename" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Status</p>
+                    <p id="job-status" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Binary Path</p>
+                    <p id="job-binary-path" class="text-white font-medium text-sm break-all">-</p>
+                </div>
+            </div>
+        </div>
+
+     
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+       
+            <div class="card rounded-xl p-6">
+                <h3 class="text-lg font-semibold mb-4 text-indigo-300">Plan Strategy</h3>
+                <p class="text-gray-400 text-sm mb-4">Generate a dynamic analysis plan for the selected binary with AI-powered suggestions</p>
+                <a href="/active-re/plan" class="btn-action w-full block text-center px-6 py-3 rounded-lg font-medium text-white">
+                    Open Plan Strategy
+                </a>
+            </div>
+
+            <div class="card rounded-xl p-6">
+                <h3 class="text-lg font-semibold mb-4 text-indigo-300">Execute with Frida</h3>
+                <p class="text-gray-400 text-sm mb-4">Execute the binary with Frida for dynamic analysis with custom scripts</p>
+                <a href="/active-re/execute" class="btn-action w-full block text-center px-6 py-3 rounded-lg font-medium text-white">
+                    Open Execute with Frida
+                </a>
+            </div>
+
+            <div class="card rounded-xl p-6">
+                <h3 class="text-lg font-semibold mb-4 text-indigo-300">Monitor Process</h3>
+                <p class="text-gray-400 text-sm mb-4">Monitor the binary during execution with real-time visualization</p>
+                <a href="/active-re/monitor" class="btn-action w-full block text-center px-6 py-3 rounded-lg font-medium text-white">
+                    Open Monitor Process
+                </a>
+            </div>
+
+            <div class="card rounded-xl p-6">
+                <h3 class="text-lg font-semibold mb-4 text-indigo-300">Orchestrator</h3>
+                <p class="text-gray-400 text-sm mb-4">AI-powered orchestration with plan generation, execution, and approval workflow</p>
+                <a href="/active-re/orchestrator" class="btn-action w-full block text-center px-6 py-3 rounded-lg font-medium text-white">
+                    Open Orchestrator
+                </a>
+            </div>
+        </div>
+
+       
+        <div class="card rounded-xl p-6 mt-6">
+            <h3 class="text-lg font-semibold mb-4 text-indigo-300">Output Console</h3>
+            <div id="output-console" class="bg-gray-900 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm">
+                <p class="text-gray-500">Output will appear here...</p>
+            </div>
+        </div>
+    </div>
+
+   
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 id="modal-title" class="text-xl font-semibold mb-4 text-white"></h3>
+            <div id="modal-content" class="mb-6"></div>
+            <div class="flex gap-4">
+                <button id="modal-cancel" class="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg text-white transition">Cancel</button>
+                <button id="modal-confirm" class="flex-1 btn-action px-4 py-2 rounded-lg text-white">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let currentJobData = null;
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('token');
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+
+        function showToast(message, type = 'info') {
+            const colors = {
+                'info': 'bg-blue-600',
+                'success': 'bg-green-600',
+                'error': 'bg-red-600',
+                'warning': 'bg-yellow-600'
+            };
+            const toast = $(`
+                <div class="fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-pulse">
+                    ${message}
+                </div>
+            `);
+            $('body').append(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function logOutput(message) {
+            const console = $('#output-console');
+            const time = new Date().toLocaleTimeString();
+            console.append(`<p class="text-gray-300">[${time}] ${message}</p>`);
+            console.scrollTop(console[0].scrollHeight);
+        }
+
+        function showModal(title, content, onConfirm) {
+            $('#modal-title').text(title);
+            $('#modal-content').html(content);
+            $('#modal').removeClass('hidden').addClass('flex');
+            
+            $('#modal-cancel').off('click').on('click', () => {
+                $('#modal').addClass('hidden').removeClass('flex');
+            });
+            
+            $('#modal-confirm').off('click').on('click', () => {
+                $('#modal').addClass('hidden').removeClass('flex');
+                if (onConfirm) onConfirm();
+            });
+        }
+
+        function closeModal() {
+            $('#modal').addClass('hidden').removeClass('flex');
+        }
+
+        function shortenPath(fullPath) {
+            if (!fullPath) return '-';
+      
+            const prefix = 'C:\\Users\\1com310568\\Downloads\\';
+            if (fullPath.startsWith(prefix)) {
+                return fullPath.substring(prefix.length);
+            }
+            return fullPath;
+        }
+
+
+        function loadJobs() {
+            $.ajax({
+                url: '/api/jobs',
+                headers: getAuthHeaders(),
+                success: function(data) {
+                    const jobs = Array.isArray(data) ? data : (data.jobs || []);
+                    const select = $('#job-select');
+                    select.empty();
+                    select.append('<option value="">-- Select a job --</option>');
+                    jobs.forEach(job => {
+                        select.append(`<option value="${job.id}">${job.filename || job.id}</option>`);
+                    });
+                },
+                error: function(err) {
+                    showToast('Failed to load jobs', 'error');
+                }
+            });
+        }
+
+        $('#load-job-btn').on('click', function() {
+            const jobId = $('#job-select').val();
+            if (!jobId) {
+                showToast('Please select a job', 'warning');
+                return;
+            }
+
+            $.ajax({
+                url: `/api/active-re/jobs/${jobId}`,
+                headers: getAuthHeaders(),
+                success: function(data) {
+                    currentJobId = data.job_id;
+                    currentJobData = data;
+
+                
+                    localStorage.setItem('active_re_selected_job', JSON.stringify(data));
+                    localStorage.setItem('active_re_current_job_id', data.job_id);
+
+                    $('#job-info').removeClass('hidden');
+                    $('#job-id').text(data.job_id);
+                    $('#job-filename').text(data.filename || '-');
+                    $('#job-status').text(data.status || '-');
+                    $('#job-binary-path').text(shortenPath(data.binary_path));
+                    logOutput(`Loaded job: ${data.filename || data.job_id}`);
+                    logOutput(`Binary path resolved: ${data.binary_path}`);
+                    showToast('Job loaded successfully. You can now use Plan/Execute/Monitor.', 'success');
+
+                
+                    updateActionLinks(data.job_id);
+                },
+                error: function(err) {
+                    showToast('Failed to load job details', 'error');
+                }
+            });
+        });
+
+        function updateActionLinks(jobId) {
+        
+            $('a[href="/active-re/plan"]').attr('href', `/active-re/plan?job_id=${jobId}`);
+            $('a[href="/active-re/execute"]').attr('href', `/active-re/execute?job_id=${jobId}`);
+            $('a[href="/active-re/monitor"]').attr('href', `/active-re/monitor?job_id=${jobId}`);
+            $('a[href="/active-re/orchestrator"]').attr('href', `/active-re/orchestrator?job_id=${jobId}`);
+        }
+
+
+        const savedJob = localStorage.getItem('active_re_selected_job');
+        if (savedJob) {
+            const jobData = JSON.parse(savedJob);
+            currentJobId = jobData.job_id;
+            currentJobData = jobData;
+            $('#job-info').removeClass('hidden');
+            $('#job-id').text(jobData.job_id);
+            $('#job-filename').text(jobData.filename || '-');
+            $('#job-status').text(jobData.status || '-');
+            $('#job-binary-path').text(shortenPath(jobData.binary_path));
+            updateActionLinks(jobData.job_id);
+            logOutput(`Restored job from session: ${jobData.filename || jobData.job_id}`);
+        }
+
+        loadJobs();
+    </script>
+</body>
+</html>

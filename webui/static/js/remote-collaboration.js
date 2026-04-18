@@ -30,6 +30,15 @@ class RemoteCollaborationManager {
         this.loadSavedSettings();
     }
 
+    async authenticatedFetch(url, options = {}) {
+        const token = localStorage.getItem('token');
+        const headers = {
+            'Authorization': `Bearer ${token}`,
+            ...options.headers
+        };
+        return fetch(url, { ...options, headers });
+    }
+
     generateUserId() {
         return 'user_' + Math.random().toString(36).substr(2, 9);
     }
@@ -60,7 +69,7 @@ class RemoteCollaborationManager {
     
     async loadApiKeys() {
         try {
-            const response = await fetch('/api/remote/api-keys');
+            const response = await this.authenticatedFetch('/api/remote/api-keys');
             if (response.ok) {
                 const data = await response.json();
                 this.renderApiKeys(data.api_keys);
@@ -115,7 +124,7 @@ class RemoteCollaborationManager {
     
     async generateApiKey() {
         try {
-            const response = await fetch('/api/remote/api-keys', { method: 'POST' });
+            const response = await this.authenticatedFetch('/api/remote/api-keys', { method: 'POST' });
             if (response.ok) {
                 const data = await response.json();
                 this.showToast('New API key generated: ' + data.api_key.substring(0, 8) + '...', 'success');
@@ -133,7 +142,7 @@ class RemoteCollaborationManager {
         }
         
         try {
-            const response = await fetch(`/api/remote/api-keys/${key}`, { method: 'DELETE' });
+            const response = await this.authenticatedFetch(`/api/remote/api-keys/${key}`, { method: 'DELETE' });
             if (response.ok) {
                 this.showToast('API key revoked successfully', 'success');
                 this.loadApiKeys();
@@ -167,11 +176,10 @@ class RemoteCollaborationManager {
         if (savedConnectionStatus === 'connected') {
             if (this.connectionMode === 'client') {
                 const savedUrl = localStorage.getItem('remote_server_url');
-                const savedUsername = localStorage.getItem('remote_username');
                 const savedApiKey = localStorage.getItem('remote_api_key');
-                
+
                 if (savedUrl) {
-                    this.connectAsClient(savedUrl, savedUsername, savedApiKey);
+                    this.connectAsClient(savedUrl, null, savedApiKey);
                 }
             } else if (this.connectionMode === 'server') {
                 this.startAsServer();
@@ -193,9 +201,6 @@ class RemoteCollaborationManager {
         
         if (savedUrl) {
             $('#remote-server-url').val(savedUrl);
-        }
-        if (savedUsername) {
-            $('#remote-username').val(savedUsername);
         }
         if (savedApiKey) {
             $('#remote-api-key').val(savedApiKey);
@@ -240,13 +245,32 @@ class RemoteCollaborationManager {
     
     async connectToRemote() {
         const serverUrl = $('#remote-server-url').val();
-        const username = $('#remote-username').val() || this.currentUser;
         const apiKey = $('#remote-api-key').val();
         const mode = $('#remote-connection-mode').val();
-        
+
+    
+        let username = 'Anonymous';
+        let userId = this.currentUser;
+
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                const response = await fetch('/api/auth/me', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (response.ok) {
+                    const userData = await response.json();
+                    username = userData.username || 'Anonymous';
+                    userId = userData.username || this.currentUser;
+                }
+            }
+        } catch (error) {
+            console.error('[Remote] Failed to get user info:', error);
+        }
 
         localStorage.setItem('remote_server_url', serverUrl);
-        localStorage.setItem('remote_username', username);
         localStorage.setItem('remote_api_key', apiKey);
         localStorage.setItem('remote_connection_mode', mode);
         
@@ -270,6 +294,30 @@ class RemoteCollaborationManager {
     }
     
     async connectAsClient(serverUrl, username, apiKey) {
+     
+        if (!username) {
+            try {
+                const token = localStorage.getItem('auth_token');
+                if (token) {
+                    const response = await fetch('/api/auth/me', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    if (response.ok) {
+                        const userData = await response.json();
+                        username = userData.username || 'Anonymous';
+                    } else {
+                        username = 'Anonymous';
+                    }
+                } else {
+                    username = 'Anonymous';
+                }
+            } catch (error) {
+                console.error('[Remote] Failed to get user info:', error);
+                username = 'Anonymous';
+            }
+        }
 
         this.authErrorOccurred = false;
         try {
@@ -310,7 +358,8 @@ class RemoteCollaborationManager {
                 this.remoteSocket.emit('collaboration_auth', {
                     username: username,
                     api_key: apiKey,
-                    mode: 'client'
+                    mode: 'client',
+                    token: localStorage.getItem('auth_token')
                 });
             });
             
@@ -420,12 +469,12 @@ class RemoteCollaborationManager {
         
 
         try {
-            const listResponse = await fetch('/api/remote/api-keys');
+            const listResponse = await this.authenticatedFetch('/api/remote/api-keys');
             if (listResponse.ok) {
                 const listData = await listResponse.json();
                 if (listData.count === 0) {
                    
-                    const response = await fetch('/api/remote/api-keys', { method: 'POST' });
+                    const response = await this.authenticatedFetch('/api/remote/api-keys', { method: 'POST' });
                     if (response.ok) {
                         const data = await response.json();
                         this.showToast('Server mode activated. API Key: ' + data.api_key, 'success');
@@ -497,7 +546,7 @@ class RemoteCollaborationManager {
     
     async fetchServerStatus() {
         try {
-            const response = await fetch('/api/remote/server/status');
+            const response = await this.authenticatedFetch('/api/remote/server/status');
             if (response.ok) {
                 const data = await response.json();
                 this.serverConnectedClients = data.total_connected_clients;
@@ -527,7 +576,7 @@ class RemoteCollaborationManager {
     
     async loadLocalJobsAsRemote() {
         try {
-            const response = await fetch('/api/remote/jobs');
+            const response = await this.authenticatedFetch('/api/remote/jobs');
             if (response.ok) {
                 const data = await response.json();
                 this.updateRemoteJobsList(data.jobs);
@@ -575,11 +624,10 @@ class RemoteCollaborationManager {
         
         this.reconnectTimeout = setTimeout(() => {
             const savedUrl = localStorage.getItem('remote_server_url');
-            const savedUsername = localStorage.getItem('remote_username');
             const savedApiKey = localStorage.getItem('remote_api_key');
-            
+
             if (savedUrl && this.connectionMode === 'client') {
-                this.connectAsClient(savedUrl, savedUsername, savedApiKey);
+                this.connectAsClient(savedUrl, null, savedApiKey);
             }
         }, actualDelay);
     }
@@ -630,7 +678,7 @@ class RemoteCollaborationManager {
         if (!this.currentRoom) return;
 
         try {
-            const response = await fetch(`/api/remote/room/${this.currentRoom}/users`);
+            const response = await this.authenticatedFetch(`/api/remote/room/${this.currentRoom}/users`);
             if (response.ok) {
                 const data = await response.json();
                 const users = data.users || [];
@@ -856,7 +904,7 @@ class RemoteCollaborationManager {
 
         
         try {
-            const response = await fetch(`/api/remote/room/${jobId}/users`);
+            const response = await this.authenticatedFetch(`/api/remote/room/${jobId}/users`);
             if (response.ok) {
                 const data = await response.json();
                 const users = data.users || [];
@@ -899,10 +947,10 @@ class RemoteCollaborationManager {
         this.connectedUsers.get(message.job_id).add(message.user_id);
         this.updateRemoteJobsList(message.available_jobs || []);
 
-      
+
         if (this.currentRoom === message.job_id) {
             try {
-                const response = await fetch(`/api/remote/room/${message.job_id}/users`);
+                const response = await this.authenticatedFetch(`/api/remote/room/${message.job_id}/users`);
                 if (response.ok) {
                     const data = await response.json();
                     this.updateConnectedUsersList(data.users || []);
@@ -921,10 +969,10 @@ class RemoteCollaborationManager {
         }
         this.updateRemoteJobsList(message.available_jobs || []);
 
-      
+
         if (this.currentRoom === message.job_id) {
             try {
-                const response = await fetch(`/api/remote/room/${message.job_id}/users`);
+                const response = await this.authenticatedFetch(`/api/remote/room/${message.job_id}/users`);
                 if (response.ok) {
                     const data = await response.json();
                     this.updateConnectedUsersList(data.users || []);

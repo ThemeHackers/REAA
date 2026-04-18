@@ -2,10 +2,14 @@ import os
 import json
 import logging
 import structlog
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, List, Callable, TYPE_CHECKING
 from pathlib import Path
 
 from core.config import settings
+
+if TYPE_CHECKING:
+    import frida
+    from frida.core import Session
 
 try:
     import frida
@@ -23,7 +27,7 @@ class FridaInstrumentation:
     def __init__(self):
         self.device = None
         self.session = None
-        self.scripts: List[frida.core.Script] = []
+        self.scripts: List[Any] = []
         self.messages: List[Dict[str, Any]] = []
         self.auto_reconnect = True
         self.max_reconnect_attempts = 3
@@ -85,7 +89,7 @@ class FridaInstrumentation:
             log.error(f"Failed to spawn process {binary_path}: {e}", exc_info=True)
             return False
 
-    def load_script(self, script_content: str) -> Optional[frida.core.Script]:
+    def load_script(self, script_content: str) -> Optional[Any]:
         if not self.session:
             log.error("No active session, cannot load script")
             return None
@@ -101,7 +105,7 @@ class FridaInstrumentation:
             log.error(f"Failed to load Frida script: {e}", exc_info=True)
             return None
 
-    def load_script_file(self, script_path: str) -> Optional[frida.core.Script]:
+    def load_script_file(self, script_path: str) -> Optional[Any]:
         script_file = Path(script_path)
         if not script_file.exists():
             log.error(f"Script file not found: {script_path}")
@@ -114,7 +118,7 @@ class FridaInstrumentation:
             log.error(f"Failed to read script file {script_path}: {e}", exc_info=True)
             return None
 
-    def unload_script(self, script: frida.core.Script) -> bool:
+    def unload_script(self, script: Any) -> bool:
         try:
             script.unload()
             self.scripts.remove(script)

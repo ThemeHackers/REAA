@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Job Queue Worker for AI Reverse Engineering System
-Processes analysis jobs using RQ (Redis Queue)
-"""
 
 import os
 import sys
@@ -25,7 +21,6 @@ redis_conn = redis.from_url(redis_url)
 queues = ['high', 'default', 'low']
 
 def analyze_binary_task(job_id):
-    """Task to analyze a binary file"""
     from app import app
     from models import db, Job
     from ghidra_assistant import GhidraAssistant
@@ -62,7 +57,6 @@ def analyze_binary_task(job_id):
             raise e
 
 def security_analysis_task(job_id, analysis_type='comprehensive'):
-    """Task to perform security analysis"""
     from app import app
     from models import db, Job
     from security_agent import SecurityAgent
@@ -102,7 +96,6 @@ def security_analysis_task(job_id, analysis_type='comprehensive'):
             raise e
 
 def graph_generation_task(job_id):
-    """Task to generate call graphs"""
     from app import app
     from models import db, Job
     

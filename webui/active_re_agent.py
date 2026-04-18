@@ -20,7 +20,6 @@ log = structlog.get_logger()
 
 
 class ActiveREAgent:
-    """AI Agent for Active Reverse Engineering and dynamic analysis"""
 
     def __init__(self):
         self.active_re_service = get_active_re_service()
@@ -40,7 +39,6 @@ class ActiveREAgent:
         self.max_parallel_tasks = 4
 
     def _init_llm_client(self) -> Optional[LLMClient]:
-        """Initialize LLM client for analysis"""
         try:
             return LLMClient(
                 model=settings.ANGR_LLM_MODEL,
@@ -52,7 +50,6 @@ class ActiveREAgent:
             return None
 
     def plan_execution_strategy(self, binary_path: str, analysis_goal: str) -> Dict[str, Any]:
-        """Plan an execution strategy for dynamic analysis"""
         plan = {
             "binary_path": binary_path,
             "goal": analysis_goal,
@@ -91,29 +88,74 @@ class ActiveREAgent:
             return {"error": str(e)}
 
     def execute_with_frida(self, binary_path: str, script_content: str = None) -> Dict[str, Any]:
-        """Execute binary with Frida instrumentation"""
         if not self.frida.is_available():
             return {"error": "Frida not available"}
 
         try:
-            job_id = uuid.uuid4().hex
-            self.active_re_service.start_analysis(job_id, binary_path)
+            from pathlib import Path
+            job_id = Path(binary_path).parent.name
 
-            if script_content:
-                self.frida.load_script(script_content)
+            # Start sandbox
+            service_result = self.active_re_service.start_analysis(job_id, binary_path)
+            if "error" in service_result:
+                return {"error": f"Failed to start analysis: {service_result['error']}"}
+
+            # Convert binary path to container path for sandbox execution
+            if binary_path.startswith("data/"):
+                container_binary_path = binary_path.replace("data/", "/app/data/")
+            elif "\\" in binary_path or "/" in binary_path:
+                path_obj = Path(binary_path)
+                parts = path_obj.parts
+                if "data" in parts:
+                    data_index = parts.index("data")
+                    if data_index + 2 < len(parts):
+                        job_id_from_path = parts[data_index + 1]
+                        filename = parts[-1]
+                        container_binary_path = f"/app/data/{job_id_from_path}/{filename}"
+                    else:
+                        container_binary_path = binary_path
+                else:
+                    container_binary_path = binary_path
             else:
-                from core.frida_instrumentation import FridaScriptTemplates
-                self.frida.load_script(FridaScriptTemplates.api_call_tracing())
+                container_binary_path = binary_path
 
+            # NOTE: Frida runs on Windows host, not in Docker container
+            # So we use the ORIGINAL Windows path for Frida spawning
+            # The binary must be executable on Windows (or use Wine for Linux binaries)
+            windows_binary_path = binary_path
+
+            # Spawn process with Frida using Windows path
+            if not self.frida.spawn_process(windows_binary_path):
+                log.warning("Failed to spawn with Frida, continuing with sandbox-only execution")
+                # Continue without Frida instrumentation
+                frida_available = False
+            else:
+                frida_available = True
+                # Load Frida script after spawning
+                if script_content:
+                    script_result = self.frida.load_script(script_content)
+                else:
+                    from core.frida_instrumentation import FridaScriptTemplates
+                    script_result = self.frida.load_script(FridaScriptTemplates.api_call_tracing())
+
+                if not script_result:
+                    log.warning("Failed to load Frida script, continuing without instrumentation")
+
+            # Execute binary through sandbox (uses container path)
             result = self.active_re_service.execute_binary(str(job_id))
-            messages = self.frida.get_messages()
+
+            # Get Frida messages if available
+            messages = self.frida.get_messages() if frida_available else []
 
             self.active_re_service.stop_analysis(str(job_id))
 
             return {
                 "job_id": job_id,
                 "execution_result": result,
-                "frida_messages": messages
+                "frida_messages": messages,
+                "binary_executed": container_binary_path,
+                "frida_spawn_path": windows_binary_path,
+                "frida_available": frida_available
             }
 
         except Exception as e:
@@ -121,7 +163,6 @@ class ActiveREAgent:
             return {"error": str(e)}
 
     def analyze_with_angr(self, binary_path: str, analysis_type: str = "symbolic") -> Dict[str, Any]:
-        """Analyze binary with angr"""
         if not self.angr.is_available():
             return {"error": "angr not available"}
 
@@ -148,7 +189,6 @@ class ActiveREAgent:
             return {"error": str(e)}
 
     def monitor_execution(self, job_id: str, duration: int = 30) -> Dict[str, Any]:
-        """Monitor binary execution with all monitors"""
         monitoring_results = {
             "job_id": job_id,
             "duration": duration,
@@ -179,7 +219,6 @@ class ActiveREAgent:
         static_analysis: Dict[str, Any],
         dynamic_analysis: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Correlate static and dynamic analysis findings"""
         correlation = {
             "matched_functions": [],
             "suspicious_patterns": [],
@@ -210,7 +249,6 @@ class ActiveREAgent:
             return {"error": str(e)}
 
     def chat_completion_stream(self, message: str) -> str:
-        """Process chat message with context from RAG"""
         self.chat_history.append({"role": "user", "content": message})
 
         try:
@@ -252,49 +290,42 @@ Please provide analysis based on the context above."""
             return f"Error: {str(e)}"
 
     def get_chat_history(self) -> List[Dict[str, Any]]:
-        """Get chat history"""
         return self.chat_history.copy()
 
     def clear_chat_history(self):
-        """Clear chat history"""
         self.chat_history.clear()
 
     def set_current_job(self, job_id: str):
-        """Set the current job being analyzed"""
         self.current_job_id = job_id
 
     def get_current_job(self) -> Optional[str]:
-        """Get the current job ID"""
         return self.current_job_id
 
     def execute_parallel_tasks(self, tasks: List[Callable]) -> Dict[str, Any]:
-        """Execute multiple analysis tasks in parallel"""
         if not self.enable_parallel:
-      
             results = {}
-            for task in tasks:
+            for i, task in enumerate(tasks):
                 try:
-                    results[task.__name__] = task()
+                    results[f"task_{i}"] = task()
                 except Exception as e:
-                    results[task.__name__] = {"error": str(e)}
+                    results[f"task_{i}"] = {"error": str(e)}
             return results
 
         results = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel_tasks) as executor:
-            future_to_task = {executor.submit(task): task for task in tasks}
+            future_to_task = {executor.submit(task): (i, task) for i, task in enumerate(tasks)}
             
             for future in concurrent.futures.as_completed(future_to_task):
-                task = future_to_task[future]
+                i, task = future_to_task[future]
                 try:
-                    results[task.__name__] = future.result()
+                    results[f"task_{i}"] = future.result()
                 except Exception as e:
-                    log.error(f"Parallel task {task.__name__} failed: {e}", exc_info=True)
-                    results[task.__name__] = {"error": str(e)}
+                    log.error(f"Parallel task {i} failed: {e}", exc_info=True)
+                    results[f"task_{i}"] = {"error": str(e)}
 
         return results
 
     def aggregate_monitoring_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Aggregate results from multiple monitoring sources"""
         aggregated = {
             "process": {"alerts": [], "events": []},
             "memory": {"anomalies": [], "patterns": {}},
@@ -353,7 +384,6 @@ Please provide analysis based on the context above."""
         return aggregated
 
     def run_comprehensive_analysis(self, binary_path: str, analysis_goal: str) -> Dict[str, Any]:
-        """Run comprehensive analysis with parallel execution and result aggregation"""
         plan = self.plan_execution_strategy(binary_path, analysis_goal)
         
         if "error" in plan:
@@ -361,23 +391,24 @@ Please provide analysis based on the context above."""
 
         tasks = []
 
-      
         if "frida" in plan.get("tools_to_use", []):
-            tasks.append(lambda: self.execute_with_frida(binary_path))
+            def execute_frida_task(bp=binary_path):
+                return self.execute_with_frida(bp)
+            tasks.append(execute_frida_task)
         
         if "angr" in plan.get("tools_to_use", []):
-            tasks.append(lambda: self.analyze_with_angr(binary_path))
+            def analyze_angr_task(bp=binary_path):
+                return self.analyze_with_angr(bp)
+            tasks.append(analyze_angr_task)
         
         if "monitoring" in plan.get("tools_to_use", []):
-            def run_monitoring():
+            def run_monitoring_task():
                 job_id = uuid.uuid4().hex
                 return self.monitor_execution(job_id)
-            tasks.append(run_monitoring)
+            tasks.append(run_monitoring_task)
 
-       
         parallel_results = self.execute_parallel_tasks(tasks)
 
-      
         monitoring_results = []
         for task_name, result in parallel_results.items():
             if "monitor" in task_name and "error" not in result:
@@ -397,7 +428,6 @@ _active_re_agent_instance: Optional[ActiveREAgent] = None
 
 
 def get_active_re_agent() -> ActiveREAgent:
-    """Get or create Active RE agent instance"""
     global _active_re_agent_instance
     if _active_re_agent_instance is None:
         _active_re_agent_instance = ActiveREAgent()

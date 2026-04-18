@@ -9,35 +9,33 @@ import signal
 import sys
 import re
 import time
+import logging
 from pathlib import Path
 from rich.console import Console
 from functools import wraps
 
 console = Console()
+log = logging.getLogger(__name__)
 
 
 rate_limit_store = {}
 
 def rate_limit(max_requests=100, window_seconds=60):
-    """Simple rate limiting decorator"""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             client_ip = request.remote_addr
             current_time = time.time()
             
-            
             if client_ip in rate_limit_store:
                 rate_limit_store[client_ip] = [t for t in rate_limit_store[client_ip] if current_time - t < window_seconds]
             else:
                 rate_limit_store[client_ip] = []
             
-          
             if len(rate_limit_store[client_ip]) >= max_requests:
                 log.warning(f"Rate limit exceeded for IP: {client_ip}")
                 return jsonify({"error": "Rate limit exceeded"}), 429
             
-          
             rate_limit_store[client_ip].append(current_time)
             
             return f(*args, **kwargs)
@@ -62,7 +60,7 @@ from webui.orchestrator_agent import get_orchestrator_agent
 from webui.report_agent import get_report_agent
 
 
-refiner_available = True  
+refiner_available = True
 
 load_dotenv()
 
@@ -83,6 +81,106 @@ def validate_api_key(api_key):
         return False
     return api_key in VALID_API_KEYS
 
+
+def resolve_job_to_binary_path(job_id):
+    """Resolve a job_id to its binary path from local job storage.
+
+    This function is used by Active RE to automatically find the binary
+    associated with a local analysis job, eliminating the need to
+    manually specify binary_path separately.
+
+    Args:
+        job_id: The job ID to look up
+
+    Returns:
+        dict: Contains 'binary_path', 'filename', 'job_dir' if found,
+              or 'error' if not found
+    """
+    try:
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+
+        if not os.path.exists(job_path):
+            return {"error": f"Job directory not found: {job_id}", "found": False}
+
+
+        binary_extensions = ('.exe', '.dll', '.sys', '.bin', '.elf', '.so', '.o', '.macho')
+        binary_file = None
+        filename = None
+
+        for file in os.listdir(job_path):
+            if file.endswith(binary_extensions):
+                binary_file = os.path.join(job_path, file)
+                filename = file
+                break
+
+        if not binary_file:
+            return {"error": f"No binary file found in job {job_id}", "found": False}
+
+        return {
+            "binary_path": binary_file,
+            "filename": filename,
+            "job_dir": job_path,
+            "job_id": job_id,
+            "found": True
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to resolve job: {str(e)}", "found": False}
+
+
+def get_local_job_info(job_id):
+    """Get comprehensive information about a local analysis job.
+
+    Args:
+        job_id: The job ID to look up
+
+    Returns:
+        dict: Job information including binary_path, status, metadata
+    """
+    try:
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+
+        if not os.path.exists(job_path):
+            return {"error": f"Job not found: {job_id}", "found": False}
+
+     
+        job_info = resolve_job_to_binary_path(job_id)
+
+        if not job_info.get("found"):
+            return job_info
+
+      
+        try:
+            file_size = os.path.getsize(job_info["binary_path"])
+        except:
+            file_size = 0
+
+     
+        artifacts_dir = os.path.join(job_path, 'artifacts')
+        has_artifacts = os.path.exists(artifacts_dir)
+
+     
+        memory_layout_file = os.path.join(artifacts_dir, 'memory_layout.json')
+        has_memory_layout = os.path.exists(memory_layout_file)
+
+        return {
+            "job_id": job_id,
+            "binary_path": job_info["binary_path"],
+            "filename": job_info["filename"],
+            "job_dir": job_path,
+            "file_size": file_size,
+            "has_artifacts": has_artifacts,
+            "has_memory_layout": has_memory_layout,
+            "status": "ready_for_active_re" if has_memory_layout else "needs_analysis",
+            "found": True
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to get job info: {str(e)}", "found": False}
+
+
 app = Flask(__name__)
 jwt_secret = os.getenv('JWT_SECRET_KEY') or os.getenv('SECRET_KEY')
 if not jwt_secret:
@@ -102,7 +200,7 @@ def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws: wss:;"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss:;"
     return response
 
 
@@ -116,27 +214,45 @@ db.init_app(app)
 assistant = GhidraAssistant()
 security_agent = SecurityAgent()
 GHIDRA_API_BASE = "http://127.0.0.1:8000"
+GHIDRA_API_KEY = os.getenv('GHIDRA_API_KEY', '')
 r2_bridge = Radare2Bridge()
 r2_agent = Radare2AgentController(r2_bridge)
 
 
-try:
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from core.llm_refiner import get_refiner, initialize_refiner
-    console.print("[STARTUP] Pre-loading LLM refiner model...")
-    refiner_loaded = initialize_refiner()
-    if refiner_loaded:
-        console.print("[green][STARTUP] [OK] LLM refiner model loaded successfully[/green]")
-    else:
-        console.print("[yellow][STARTUP] [WARNING] LLM refiner model failed to load (will load on first use)[/yellow]")
-except Exception as e:
-    console.print(f"[red][STARTUP] [ERROR] Failed to pre-load LLM refiner: {e}[/red]")
+# try:
+#     import sys
+#     import os
+#     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+#     from core.llm_refiner import get_refiner, initialize_refiner
+#     console.print("[STARTUP] Pre-loading LLM refiner model...")
+#     refiner_loaded = initialize_refiner()
+#     if refiner_loaded:
+#         console.print("[green][STARTUP] [OK] LLM refiner model loaded successfully[/green]")
+#     else:
+#         console.print("[yellow][STARTUP] [WARNING] LLM refiner model failed to load (will load on first use)[/yellow]")
+# except Exception as e:
+#     console.print(f"[red][STARTUP] [ERROR] Failed to pre-load LLM refiner: {e}[/red]")
+
+
+session_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.session.json')
+if os.path.exists(session_file):
+    try:
+        import json
+        with open(session_file, 'r') as f:
+            session_data = json.load(f)
+    
+        auth_manager.create_session(session_data['user_id'], session_data['token'])
+        console.print("[green][STARTUP] [OK] Session restored from .session.json[/green]")
+    except Exception as e:
+        console.print(f"[yellow][STARTUP] [WARNING] Failed to load session: {e}[/yellow]")
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/login')
+def login_page():
+    return render_template('login.html')
 
 def _validate_job_id(job_id):
     if not SAFE_JOB_ID_PATTERN.fullmatch(job_id):
@@ -153,7 +269,28 @@ def _resolve_within_base(base_dir, untrusted_path):
 def pseudocode():
     return render_template('pseudocode.html')
 
+@app.route('/active-re')
+def active_re():
+    return render_template('active-re.html')
+
+@app.route('/active-re/plan')
+def active_re_plan_page():
+    return render_template('active-re-plan.html')
+
+@app.route('/active-re/execute')
+def active_re_execute_page():
+    return render_template('active-re-execute.html')
+
+@app.route('/active-re/monitor')
+def active_re_monitor_page():
+    return render_template('active-re-monitor.html')
+
+@app.route('/active-re/orchestrator')
+def active_re_orchestrator_page():
+    return render_template('active-re-orchestrator.html')
+
 @app.route('/api/jobs/<job_id>/pseudocode/<filename>', methods=['GET'])
+@token_required
 def get_pseudocode_content(job_id, filename):
     try:
         _validate_job_id(job_id)
@@ -185,16 +322,16 @@ def register():
         username = data.get('username')
         email = data.get('email')
         password = data.get('password')
-        
-        if not all([username, email, password]):
-            return jsonify({'error': 'Username, email, and password are required'}), 400
-        
+
+        if not all([username, password]):
+            return jsonify({'error': 'Username and password are required'}), 400
+
         if User.query.filter_by(username=username).first():
             return jsonify({'error': 'Username already exists'}), 400
-        
-        if User.query.filter_by(email=email).first():
+
+        if email and User.query.filter_by(email=email).first():
             return jsonify({'error': 'Email already exists'}), 400
-        
+
         user = User(username=username, email=email)
         user.set_password(password)
         
@@ -235,12 +372,23 @@ def login():
         if not user.is_active:
             return jsonify({'error': 'Account is inactive'}), 403
         
-        user.last_login = datetime.datetime.utcnow()
+        user.last_login = datetime.datetime.now(datetime.UTC)
         
         token = auth_manager.generate_token(user.id)
         auth_manager.create_session(user.id, token)
         
         db.session.commit()
+        
+       
+        session_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.session.json')
+        with open(session_file, 'w') as f:
+            import json
+            json.dump({
+                'token': token,
+                'user_id': user.id,
+                'username': user.username,
+                'created_at': datetime.datetime.now(datetime.UTC).isoformat()
+            }, f)
         
         return jsonify({
             'success': True,
@@ -267,6 +415,14 @@ def logout():
         token = parts[1]
         auth_manager.invalidate_session(token)
         
+     
+        session_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.session.json')
+        if os.path.exists(session_file):
+            try:
+                os.remove(session_file)
+            except Exception as e:
+                log.error(f"Failed to delete session file: {e}")
+        
         return jsonify({'success': True, 'message': 'Logged out successfully'})
         
     except (KeyError, IndexError) as e:
@@ -277,10 +433,19 @@ def logout():
         return jsonify({'error': 'Logout failed'}), 500
 
 @app.route('/api/auth/me', methods=['GET'])
-@token_required
 def get_current_user():
     try:
-        user = User.query.get(request.current_user_id)
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header or ' ' not in auth_header:
+            return jsonify({'error': 'No token provided'}), 401
+        
+        token = auth_header.split(' ')[1]
+        user_id = auth_manager.verify_token(token)
+        
+        if not user_id:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+        
+        user = User.query.get(user_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
@@ -306,7 +471,8 @@ def upload_file():
             'file': (file.filename, contents)
         }
 
-        response = requests.post(f"{GHIDRA_API_BASE}/analyze", files=files)
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+        response = requests.post(f"{GHIDRA_API_BASE}/analyze", files=files, headers=headers)
         response.raise_for_status()
 
         return jsonify(response.json())
@@ -341,7 +507,8 @@ def chat():
 @app.route('/jobs', methods=['GET'])
 def list_jobs():
     try:
-        response = requests.get(f"{GHIDRA_API_BASE}/jobs")
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+        response = requests.get(f"{GHIDRA_API_BASE}/jobs", headers=headers)
         response.raise_for_status()
         return jsonify(response.json())
     except requests.exceptions.RequestException as e:
@@ -350,7 +517,8 @@ def list_jobs():
 @app.route('/status/<job_id>', methods=['GET'])
 def get_status(job_id):
     try:
-        response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}")
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+        response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}", headers=headers)
         response.raise_for_status()
         return jsonify(response.json())
     except requests.exceptions.RequestException as e:
@@ -445,6 +613,7 @@ def security_scan():
         return jsonify({"error": "Security scan failed"}), 500
 
 @app.route('/api/jobs', methods=['GET'])
+@token_required
 def api_list_jobs():
     try:
         import os
@@ -461,7 +630,8 @@ def api_list_jobs():
         console.print(f"[cyan][OK]Found job directories: {job_directories}[/cyan]")
         
         try:
-            response = requests.get(f"{GHIDRA_API_BASE}/jobs", timeout=5)
+            headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+            response = requests.get(f"{GHIDRA_API_BASE}/jobs", timeout=5, headers=headers)
             response.raise_for_status()
             
             jobs_data = response.json()
@@ -585,14 +755,16 @@ def api_list_jobs():
         return jsonify({"error": "Failed to retrieve jobs"}), 500
 
 @app.route('/api/jobs/<job_id>', methods=['DELETE'])
+@token_required
 def delete_job(job_id):
     try:
         ghidra_available = False
         try:
-            status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}", timeout=2)
+            headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+            status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}", timeout=2, headers=headers)
             if status_response.status_code == 200:
                 ghidra_available = True
-                delete_response = requests.delete(f"{GHIDRA_API_BASE}/jobs/{job_id}", timeout=2)
+                delete_response = requests.delete(f"{GHIDRA_API_BASE}/jobs/{job_id}", timeout=2, headers=headers)
                 delete_response.raise_for_status()
         except (requests.exceptions.RequestException, requests.exceptions.Timeout):
             ghidra_available = False
@@ -611,9 +783,11 @@ def delete_job(job_id):
         return jsonify({"error": "Failed to delete job"}), 500
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
+@token_required
 def api_get_job(job_id):
     try:
-        status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}")
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+        status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}", headers=headers)
         status_response.raise_for_status()
         status_data = status_response.json()
         
@@ -627,6 +801,14 @@ def api_get_job(job_id):
         except:
             security_report = None
         
+        job_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', job_id)
+        binary_path = None
+        if os.path.exists(job_dir):
+            for file in os.listdir(job_dir):
+                if file.endswith('.exe') or file.endswith('.sys') or file.endswith('.dll') or file.endswith('.bin'):
+                    binary_path = os.path.join(job_dir, file)
+                    break
+        
         job_details = {
             'id': job_id,
             'status': status_data.get('status'),
@@ -637,7 +819,8 @@ def api_get_job(job_id):
             'duration': status_data.get('duration'),
             'error_message': status_data.get('error_message'),
             'chat_history': history,
-            'security_report': security_report
+            'security_report': security_report,
+            'binary_path': binary_path
         }
         
         return jsonify(job_details)
@@ -650,34 +833,101 @@ def api_get_job(job_id):
         return jsonify({"error": "Failed to retrieve job details"}), 500
 
 @app.route('/api/jobs/<job_id>/download', methods=['GET'])
+@token_required
 def api_download_job_results(job_id):
     try:
         import zipfile
         import io
-        
+        import os
+
+        log.info(f"[Download] Starting download for job: {job_id}")
+
+      
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        job_path = os.path.join(jobs_dir, job_id)
+
+        if not os.path.exists(job_path):
+            log.error(f"[Download] Job directory not found: {job_path}")
+            return jsonify({"error": "Job not found", "details": f"Job ID {job_id} does not exist"}), 404
+
         zip_buffer = io.BytesIO()
-        
+
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+         
             try:
                 history = assistant.load_history(job_id)
                 zip_file.writestr(f"chat_history_{job_id}.json", json.dumps(history, indent=2))
             except Exception as e:
-                zip_file.writestr(f"chat_history_error.txt", "Failed to retrieve chat history")
+                log.warning(f"[Download] Failed to load chat history: {e}")
+                zip_file.writestr(f"chat_history_error.txt", f"Failed to retrieve chat history: {e}")
+
+          
             try:
                 security_report = security_agent.generate_security_report(job_id)
                 zip_file.writestr(f"security_report_{job_id}.json", json.dumps(security_report, indent=2))
             except Exception as e:
-                zip_file.writestr(f"security_report_error.txt", "Failed to generate security report")
+                log.warning(f"[Download] Failed to generate security report: {e}")
+                zip_file.writestr(f"security_report_error.txt", f"Failed to generate security report: {e}")
+
+  
             try:
-                status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}")
+                headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+                status_response = requests.get(f"{GHIDRA_API_BASE}/status/{job_id}", headers=headers, timeout=5)
                 if status_response.ok:
                     status_data = status_response.json()
                     zip_file.writestr(f"job_status_{job_id}.json", json.dumps(status_data, indent=2))
             except Exception as e:
-                zip_file.writestr(f"job_status_error.txt", "Failed to retrieve job status")
-        
+                log.warning(f"[Download] Failed to retrieve job status: {e}")
+                zip_file.writestr(f"job_status_error.txt", f"Failed to retrieve job status: {e}")
+
+           
+            memory_file = os.path.join(job_path, 'artifacts', 'memory_layout.json')
+            if os.path.exists(memory_file):
+                try:
+                    with open(memory_file, 'r') as f:
+                        memory_data = json.load(f)
+                    zip_file.writestr(f"memory_layout_{job_id}.json", json.dumps(memory_data, indent=2))
+                except Exception as e:
+                    log.warning(f"[Download] Failed to add memory layout: {e}")
+
+         
+            binary_files = [f for f in os.listdir(job_path) if f.endswith(('.exe', '.dll', '.bin', '.elf', '.so', '.o'))]
+            for binary_file in binary_files:
+                binary_path = os.path.join(job_path, binary_file)
+                try:
+                    zip_file.write(binary_path, arcname=f"binary_{binary_file}")
+                except Exception as e:
+                    log.warning(f"[Download] Failed to add binary file: {e}")
+
+          
+            results_file = os.path.join(job_path, 'artifacts', 'analysis_results.json')
+            if os.path.exists(results_file):
+                try:
+                    with open(results_file, 'r') as f:
+                        results_data = json.load(f)
+                    zip_file.writestr(f"analysis_results_{job_id}.json", json.dumps(results_data, indent=2))
+                except Exception as e:
+                    log.warning(f"[Download] Failed to add analysis results: {e}")
+
+           
+            manifest = {
+                "job_id": job_id,
+                "export_time": datetime.datetime.now().isoformat(),
+                "files_included": [
+                    "chat_history",
+                    "security_report",
+                    "job_status",
+                    "memory_layout" if os.path.exists(memory_file) else None,
+                    "binary" if binary_files else None,
+                    "analysis_results" if os.path.exists(results_file) else None
+                ]
+            }
+            zip_file.writestr("manifest.json", json.dumps(manifest, indent=2))
+
         zip_buffer.seek(0)
-        
+
+        log.info(f"[Download] Successfully created zip for job: {job_id}")
+
         return Response(
             zip_buffer.getvalue(),
             mimetype='application/zip',
@@ -685,20 +935,22 @@ def api_download_job_results(job_id):
                 'Content-Disposition': f'attachment; filename=analysis_results_{job_id[:8]}.zip'
             }
         )
-        
+
     except Exception as e:
+        log.error(f"[Download] Failed to download results: {e}", exc_info=True)
         return jsonify({"error": f"Failed to download results: {e}"}), 500
 
 @app.route('/api/system/status', methods=['GET'])
+@token_required
 def api_system_status():
     try:
         try:
-            response = requests.get(f"{GHIDRA_API_BASE}/jobs", timeout=3)
+            response = requests.get(f"{GHIDRA_API_BASE}/health", timeout=3)
             response.raise_for_status()
             ghidra_online = True
         except requests.exceptions.RequestException:
             ghidra_online = False
-        
+
         return jsonify({
             'ghidra_online': ghidra_online,
             'ghidra_api_url': GHIDRA_API_BASE,
@@ -714,6 +966,7 @@ def api_system_status():
         }), 500
 
 @app.route('/api/docker/status', methods=['GET'])
+@token_required
 def api_docker_status():
     try:
 
@@ -786,6 +1039,7 @@ def api_docker_status():
         }), 500
 
 @app.route('/api/docker/logs/<container_name>', methods=['GET'])
+@token_required
 def api_docker_logs(container_name):
     try:
         lines = request.args.get('lines', 50, type=int)
@@ -818,6 +1072,7 @@ def api_docker_logs(container_name):
         }), 500
 
 @app.route('/api/gpu/status', methods=['GET'])
+@token_required
 def api_gpu_status():
     try:
         import sys
@@ -881,6 +1136,7 @@ def get_refined(job_id, addr):
         return jsonify({"error": "Failed to retrieve refined code"}), 500
 
 @app.route('/api/jobs/<job_id>/refine/batch', methods=['POST'])
+@token_required
 def batch_refine(job_id):
     try:
         import os
@@ -977,6 +1233,7 @@ def batch_refine(job_id):
         return jsonify({"error": "Batch refinement failed"}), 500
 
 @app.route('/api/jobs/<job_id>/pseudocode/files', methods=['GET'])
+@token_required
 def get_pseudocode_files(job_id):
     try:
         import os
@@ -1008,6 +1265,7 @@ def get_pseudocode_files(job_id):
         return jsonify({"error": "Failed to retrieve pseudocode files"}), 500
 
 @app.route('/api/jobs/<job_id>/diff/<filename>', methods=['GET'])
+@token_required
 def get_file_diff(job_id, filename):
     try:
         import difflib
@@ -1045,6 +1303,7 @@ def get_file_diff(job_id, filename):
         return jsonify({"error": "Failed to retrieve file diff"}), 500
 
 @app.route('/api/jobs/<job_id>/refine/selective', methods=['POST'])
+@token_required
 def selective_refine(job_id):
     try:
         import os
@@ -1157,13 +1416,15 @@ def selective_refine(job_id):
         return jsonify({"error": "Selective refinement failed"}), 500
 
 @app.route('/api/jobs/cleanup', methods=['POST'])
+@token_required
 def api_cleanup_jobs():
     try:
         data = request.get_json() or {}
         older_than_days = data.get('older_than_days', 7)
         keep_running = data.get('keep_running', True)
         
-        jobs_response = requests.get(f"{GHIDRA_API_BASE}/jobs")
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+        jobs_response = requests.get(f"{GHIDRA_API_BASE}/jobs", headers=headers)
         jobs_response.raise_for_status()
         jobs_data = jobs_response.json()
         
@@ -1185,7 +1446,7 @@ def api_cleanup_jobs():
         
         for job_id in jobs_to_delete:
             try:
-                delete_response = requests.delete(f"{GHIDRA_API_BASE}/jobs/{job_id}")
+                delete_response = requests.delete(f"{GHIDRA_API_BASE}/jobs/{job_id}", headers=headers)
                 if delete_response.ok:
                     cleanup_job_data(job_id)
                     deleted_count += 1
@@ -1261,6 +1522,7 @@ def cleanup_job_data(job_id):
     return cleanup_result
 
 @app.route('/api/r2/status', methods=['GET'])
+@token_required
 def r2_status():
     available = r2_bridge.check_r2_available()
     version = r2_bridge.get_version() if available else None
@@ -1270,6 +1532,7 @@ def r2_status():
     })
 
 @app.route('/api/r2/analyze', methods=['POST'])
+@token_required
 def r2_analyze():
     data = request.get_json()
     file_path = data.get('file_path')
@@ -1281,6 +1544,7 @@ def r2_analyze():
     return jsonify(result)
 
 @app.route('/api/r2/command', methods=['POST'])
+@token_required
 def r2_execute_command():
     data = request.get_json()
     command = data.get('command')
@@ -1317,6 +1581,7 @@ def r2_execute_command():
         }), 500
 
 @app.route('/api/r2/load', methods=['POST'])
+@token_required
 def r2_load_file():
     data = request.get_json()
     job_id = data.get('job_id')
@@ -1388,14 +1653,17 @@ def r2_load_file():
         return jsonify({"error": "Failed to load file into radare2"}), 500
 
 @app.route('/api/r2/functions', methods=['GET'])
+@token_required
 def r2_get_functions():
     functions = r2_bridge.get_functions()
     return jsonify({"functions": functions})
 
 @app.route('/api/jobs/<job_id>/functions', methods=['GET'])
+@token_required
 def get_job_functions(job_id):
     try:
-        response = requests.get(f"{GHIDRA_API_BASE}/jobs/{job_id}/functions", timeout=5)
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+        response = requests.get(f"{GHIDRA_API_BASE}/jobs/{job_id}/functions", timeout=5, headers=headers)
         if response.ok:
             return jsonify(response.json())
 
@@ -1405,16 +1673,19 @@ def get_job_functions(job_id):
         return jsonify({"error": "Failed to retrieve job functions"}), 500
 
 @app.route('/api/r2/strings', methods=['GET'])
+@token_required
 def r2_get_strings():
     strings = r2_bridge.get_strings()
     return jsonify({"strings": strings})
 
 @app.route('/api/r2/imports', methods=['GET'])
+@token_required
 def r2_get_imports():
     imports = r2_bridge.get_imports()
     return jsonify({"imports": imports})
 
 @app.route('/api/r2/autonomous', methods=['POST'])
+@token_required
 def r2_autonomous_analyze():
     data = request.get_json()
     analysis_plan = data.get('plan', [])
@@ -1426,11 +1697,13 @@ def r2_autonomous_analyze():
     return jsonify(result)
 
 @app.route('/api/r2/summary', methods=['GET'])
+@token_required
 def r2_get_summary():
     summary = r2_agent.get_analysis_summary()
     return jsonify(summary)
 
 @app.route('/api/r2/boundaries', methods=['GET', 'POST'])
+@token_required
 def r2_boundaries():
     if request.method == 'POST':
         data = request.get_json()
@@ -1440,6 +1713,7 @@ def r2_boundaries():
         return jsonify({"boundaries": r2_agent.boundaries})
 
 @app.route('/api/r2/asm/config', methods=['GET', 'POST'])
+@token_required
 def r2_asm_config():
     if request.method == 'POST':
         data = request.get_json()
@@ -1449,6 +1723,7 @@ def r2_asm_config():
         return jsonify({"config": r2_bridge.get_asm_config()})
 
 @app.route('/api/r2/asm/preset', methods=['POST'])
+@token_required
 def r2_asm_preset():
     data = request.get_json()
     preset = data.get('preset')
@@ -1471,6 +1746,7 @@ def r2_asm_preset():
         return jsonify({"error": "Failed to apply ASM preset"}), 500
 
 @app.route('/api/r2/disasm/function', methods=['POST'])
+@token_required
 def r2_disasm_function():
     data = request.get_json()
     function_name = data.get('function_name')
@@ -1483,6 +1759,7 @@ def r2_disasm_function():
     return jsonify({"output": result})
 
 @app.route('/api/r2/disasm/range', methods=['POST'])
+@token_required
 def r2_disasm_range():
     data = request.get_json()
     start_addr = data.get('start_addr')
@@ -1496,6 +1773,7 @@ def r2_disasm_range():
     return jsonify({"output": result})
 
 @app.route('/api/r2/disasm/graph', methods=['POST'])
+@token_required
 def r2_disasm_graph():
     data = request.get_json()
     function_name = data.get('function_name')
@@ -1507,6 +1785,7 @@ def r2_disasm_graph():
     return jsonify({"output": result})
 
 @app.route('/api/asm/analyze', methods=['POST'])
+@token_required
 def analyze_asm_code():
     data = request.get_json()
     code = data.get('code')
@@ -1609,11 +1888,13 @@ def transform_memory_data(data):
     }
 
 @app.route('/api/jobs/<job_id>/memory', methods=['GET'])
+@token_required
 def get_memory_layout(job_id):
     print(f"[Memory Layout] Called for job_id: {job_id}")
     try:
 
-        response = requests.get(f"{GHIDRA_API_BASE}/results/{job_id}/memory", timeout=5)
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+        response = requests.get(f"{GHIDRA_API_BASE}/results/{job_id}/memory", timeout=5, headers=headers)
         print(f"[Memory Layout] Ghidra API response status: {response.status_code}")
         if response.ok:
             data = response.json()
@@ -1663,12 +1944,14 @@ def get_memory_layout(job_id):
             ]
         })
 
-@app.route('/api/jobs/<job_id>/memory/<section_name>/hex', methods=['GET'])
+@app.route('/api/jobs/<job_id>/memory/<path:section_name>/hex', methods=['GET'])
+@token_required
 def get_memory_hex_dump(job_id, section_name):
     try:
         import os
         
-        response = requests.get(f"{GHIDRA_API_BASE}/results/{job_id}/memory/{section_name}/hex", timeout=5)
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+        response = requests.get(f"{GHIDRA_API_BASE}/results/{job_id}/memory/{section_name}/hex", timeout=5, headers=headers)
         if response.ok:
             return jsonify(response.json())
         
@@ -1744,6 +2027,7 @@ def get_memory_hex_dump(job_id, section_name):
         return jsonify({"error": "Failed to retrieve memory hex dump"}), 500
 
 @app.route('/api/jobs/<job_id>/memory/analysis', methods=['GET'])
+@token_required
 def get_memory_analysis(job_id):
     try:
         import os
@@ -1842,6 +2126,7 @@ def get_memory_analysis(job_id):
         return jsonify({"error": "Failed to retrieve memory analysis"}), 500
 
 @app.route('/api/jobs/<job_id>/memory/strings', methods=['GET'])
+@token_required
 def get_memory_strings(job_id):
     try:
         import os
@@ -1931,13 +2216,15 @@ def get_memory_strings(job_id):
         return jsonify({"error": "Failed to retrieve memory strings"}), 500
 
 @app.route('/api/jobs/<job_id>/memory/<address>/xref', methods=['GET'])
+@token_required
 def get_memory_xref(job_id, address):
     try:
         xref_type = request.args.get('type', 'all')
         
+        headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
         response = requests.post(f"{GHIDRA_API_BASE}/tools/get_xrefs", 
                                 json={"job_id": job_id, "addr": address}, 
-                                timeout=5)
+                                timeout=5, headers=headers)
         
         if response.ok:
             try:
@@ -1973,63 +2260,101 @@ def get_memory_xref(job_id, address):
         log.error(f"Error in get_memory_xref: {e}", exc_info=True)
         return jsonify({"error": "Failed to retrieve memory xref"}), 500
 
-@app.route('/api/jobs/<job_id>/memory/compare/<section1>/<section2>', methods=['GET'])
+@app.route('/api/jobs/<job_id>/memory/compare/<path:section1>/<path:section2>', methods=['GET'])
+@token_required
 def compare_memory_sections(job_id, section1, section2):
     try:
         import os
-        
+
+        log.info(f"[Memory Compare] Called for job_id: {job_id}, sections: {section1} vs {section2}")
+
         jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
         job_path = os.path.join(jobs_dir, job_id)
+
+        if not os.path.exists(job_path):
+            log.error(f"[Memory Compare] Job directory not found: {job_path}")
+            return jsonify({"error": "Job not found", "details": f"Job ID {job_id} does not exist"}), 404
+
         memory_file = os.path.join(job_path, 'artifacts', 'memory_layout.json')
-        
+
         if not os.path.exists(memory_file):
-            return jsonify({"error": "Memory layout file not found"}), 404
-        
+            log.error(f"[Memory Compare] Memory layout file not found: {memory_file}")
+            return jsonify({"error": "Memory layout file not found", "details": "Run analysis first to generate memory layout"}), 404
+
         with open(memory_file, 'r') as f:
             memory_data = json.load(f)
-        
+
         sections = memory_data.get('sections', [])
-        
+        log.info(f"[Memory Compare] Found {len(sections)} sections in memory layout")
+
         sec1 = next((s for s in sections if s.get('name') == section1), None)
         sec2 = next((s for s in sections if s.get('name') == section2), None)
-        
-        if not sec1 or not sec2:
-            return jsonify({"error": "One or both sections not found"}), 404
-        
+
+        if not sec1:
+            available = [s.get('name') for s in sections]
+            log.error(f"[Memory Compare] Section1 '{section1}' not found. Available: {available}")
+            return jsonify({"error": f"Section '{section1}' not found", "details": f"Available sections: {available}"}), 404
+
+        if not sec2:
+            available = [s.get('name') for s in sections]
+            log.error(f"[Memory Compare] Section2 '{section2}' not found. Available: {available}")
+            return jsonify({"error": f"Section '{section2}' not found", "details": f"Available sections: {available}"}), 404
+
         binary_file = None
         for file in os.listdir(job_path):
-            if file.endswith('.exe') or file.endswith('.dll') or file.endswith('.bin'):
+            if file.endswith(('.exe', '.dll', '.bin', '.elf', '.so', '.o')):
                 binary_file = os.path.join(job_path, file)
                 break
-        
+
         if not binary_file:
-            return jsonify({"error": "Binary file not found"}), 404
-        
+            log.error(f"[Memory Compare] Binary file not found in {job_path}")
+            return jsonify({"error": "Binary file not found", "details": "No binary file found in job directory"}), 404
+
         MAX_SECTION_SIZE = 10485760
-        
+
         def read_section_bytes(section):
-            start_addr = section.get('start', '0x0')
+            start_addr = section.get('start', section.get('address', '0x0'))
             end_addr = section.get('end', '0x0')
-            start_offset = int(start_addr, 16)
-            end_offset = int(end_addr, 16)
+
+            if isinstance(start_addr, str):
+                start_offset = int(start_addr, 16)
+            else:
+                start_offset = int(start_addr)
+
+            if end_addr and end_addr != '0x0':
+                if isinstance(end_addr, str):
+                    end_offset = int(end_addr, 16)
+                else:
+                    end_offset = int(end_addr)
+            else:
+                size = section.get('size', section.get('virtual_size', 0))
+                end_offset = start_offset + size
+
             section_size = end_offset - start_offset
-            
+
             if section_size > MAX_SECTION_SIZE:
                 raise ValueError(f"Section too large: {section_size} bytes (max {MAX_SECTION_SIZE})")
-            
+
+            if section_size <= 0:
+                raise ValueError(f"Invalid section size: {section_size}")
+
             with open(binary_file, 'rb') as f:
                 f.seek(start_offset)
                 return f.read(section_size)
-        
-        bytes1 = read_section_bytes(sec1)
-        bytes2 = read_section_bytes(sec2)
-        
+
+        try:
+            bytes1 = read_section_bytes(sec1)
+            bytes2 = read_section_bytes(sec2)
+        except ValueError as ve:
+            log.error(f"[Memory Compare] Error reading section bytes: {ve}")
+            return jsonify({"error": str(ve)}), 400
+
         min_length = min(len(bytes1), len(bytes2))
         max_length = max(len(bytes1), len(bytes2))
-        
+
         matching_bytes = 0
         different_bytes = []
-        
+
         for i in range(min_length):
             if bytes1[i] == bytes2[i]:
                 matching_bytes += 1
@@ -2039,20 +2364,22 @@ def compare_memory_sections(job_id, section1, section2):
                     "section1_byte": hex(bytes1[i]),
                     "section2_byte": hex(bytes2[i])
                 })
-        
+
         similarity = (matching_bytes / max_length * 100) if max_length > 0 else 0
-        
+
+        log.info(f"[Memory Compare] Comparison complete. Similarity: {similarity:.2f}%")
+
         return jsonify({
             "section1": {
                 "name": section1,
                 "size": len(bytes1),
-                "start": sec1.get('start'),
+                "start": sec1.get('start', sec1.get('address')),
                 "end": sec1.get('end')
             },
             "section2": {
                 "name": section2,
                 "size": len(bytes2),
-                "start": sec2.get('start'),
+                "start": sec2.get('start', sec2.get('address')),
                 "end": sec2.get('end')
             },
             "comparison": {
@@ -2060,15 +2387,16 @@ def compare_memory_sections(job_id, section1, section2):
                 "matching_bytes": matching_bytes,
                 "different_bytes": len(different_bytes),
                 "similarity_percentage": round(similarity, 2),
-                "differences": different_bytes[:100]  
+                "differences": different_bytes[:100]
             }
         })
-        
+
     except Exception as e:
-        log.error(f"Error in compare_memory_sections: {e}", exc_info=True)
-        return jsonify({"error": "Failed to compare memory sections"}), 500
+        log.error(f"[Memory Compare] Error in compare_memory_sections: {e}", exc_info=True)
+        return jsonify({"error": "Failed to compare memory sections", "details": str(e)}), 500
 
 @app.route('/api/jobs/<job_id>/memory/pattern/search', methods=['POST'])
+@token_required
 def search_memory_pattern(job_id):
     try:
         import os
@@ -2186,6 +2514,7 @@ def search_memory_pattern(job_id):
         return jsonify({"error": "Failed to search memory pattern"}), 500
 
 @app.route('/api/remote/health', methods=['GET'])
+@token_required
 def remote_health():
     return jsonify({
         "status": "healthy",
@@ -2194,11 +2523,13 @@ def remote_health():
     })
 
 @app.route('/api/remote/server/status', methods=['GET'])
+@token_required
 def remote_server_status():
     try:
         ghidra_online = False
         try:
-            response = requests.get(f"{GHIDRA_API_BASE}/jobs", timeout=2)
+            headers = {'X-API-Key': GHIDRA_API_KEY} if GHIDRA_API_KEY else {}
+            response = requests.get(f"{GHIDRA_API_BASE}/jobs", timeout=2, headers=headers)
             if response.ok:
                 ghidra_online = True
         except:
@@ -2215,6 +2546,7 @@ def remote_server_status():
         return jsonify({"error": "Failed to retrieve remote server status"}), 500
 
 @app.route('/api/remote/jobs', methods=['GET'])
+@token_required
 def get_remote_jobs():
     try:
         import os
@@ -2224,6 +2556,9 @@ def get_remote_jobs():
 
         if os.path.exists(data_dir):
             for job_id in os.listdir(data_dir):
+              
+                if job_id == 'vector_db':
+                    continue
                 job_path = os.path.join(data_dir, job_id)
                 if os.path.isdir(job_path):
 
@@ -2276,6 +2611,7 @@ def get_remote_jobs():
         return jsonify({"error": "Failed to retrieve remote jobs"}), 500
 
 @app.route('/api/remote/room/<job_id>/users', methods=['GET'])
+@token_required
 def get_room_users(job_id):
     try:
         if job_id not in room_users:
@@ -2294,7 +2630,7 @@ def get_room_users(job_id):
         return jsonify({"error": "Failed to retrieve users"}), 500
 
 @app.route('/api/remote/api-keys', methods=['GET'])
-@admin_required
+@token_required
 def get_api_keys():
     return jsonify({
         "api_keys": list(VALID_API_KEYS),
@@ -2302,7 +2638,7 @@ def get_api_keys():
     })
 
 @app.route('/api/remote/api-keys', methods=['POST'])
-@admin_required
+@token_required
 def create_api_key():
     new_key = generate_api_key()
     VALID_API_KEYS.add(new_key)
@@ -2312,7 +2648,7 @@ def create_api_key():
     }), 201
 
 @app.route('/api/remote/api-keys/<key>', methods=['DELETE'])
-@admin_required
+@token_required
 def delete_api_key(key):
     if key in VALID_API_KEYS:
         VALID_API_KEYS.remove(key)
@@ -2374,24 +2710,37 @@ def handle_collaboration_auth(data):
     print(f'[Remote] Auth request: username={data.get("username")}, mode={data.get("mode")}')
     username = data.get('username', 'Anonymous')
     api_key = data.get('api_key')
+    token = data.get('token')
     mode = data.get('mode', 'client')
-    
-    if not api_key:
-        print(f'[Remote] Auth failed: API key is required')
-        emit('auth_error', {'error': 'API key is required for connection'})
-        return False
-    
-    if not validate_api_key(api_key):
-        print(f'[Remote] Auth failed: Invalid API key')
-        emit('auth_error', {'error': 'Invalid API key'})
-        return False
-    
+
+
+    if token:
+        try:
+            decoded = auth_manager.verify_token(token)
+            if decoded:
+                username = decoded.get('username', username)
+                print(f'[Remote] Authenticated via JWT token: username={username}')
+        except Exception as e:
+            print(f'[Remote] JWT token validation failed: {e}')
+
+  
+    if not token:
+        if not api_key:
+            print(f'[Remote] Auth failed: API key is required')
+            emit('auth_error', {'error': 'API key is required for connection'})
+            return False
+
+        if not validate_api_key(api_key):
+            print(f'[Remote] Auth failed: Invalid API key')
+            emit('auth_error', {'error': 'Invalid API key'})
+            return False
+
     if request.sid not in connected_clients:
         connected_clients[request.sid] = {}
     connected_clients[request.sid]['username'] = username
     connected_clients[request.sid]['mode'] = mode
     connected_clients[request.sid]['api_key'] = api_key
-    
+
     print(f'[Remote] Auth success: user_id={request.sid}, username={username}')
     emit('auth_success', {
         'user_id': request.sid,
@@ -2594,6 +2943,8 @@ def get_available_jobs():
 
         jobs = []
         for job_id in os.listdir(jobs_dir):
+            if job_id == 'vector_db':
+                continue
             job_path = os.path.join(jobs_dir, job_id)
             if os.path.isdir(job_path):
                 local_filename = None
@@ -2645,6 +2996,7 @@ def get_available_jobs():
         return []
 
 @app.route('/api/jobs/<job_id>/strings', methods=['GET'])
+@token_required
 def get_strings(job_id):
    
     try:
@@ -2676,6 +3028,7 @@ def get_strings(job_id):
         return jsonify({"error": "Failed to retrieve strings"}), 500
 
 @app.route('/api/jobs/<job_id>/imports', methods=['GET'])
+@token_required
 def get_imports(job_id):
   
     try:
@@ -2710,7 +3063,7 @@ def get_imports(job_id):
         return jsonify({"error": "Failed to retrieve imports"}), 500
 
 @app.route('/api/settings', methods=['POST'])
-@admin_required
+@token_required
 def save_settings():
     
     try:
@@ -2743,6 +3096,7 @@ def save_settings():
         return jsonify({"success": False, "error": "Failed to save settings"}), 500
 
 @app.route('/api/models', methods=['GET'])
+@token_required
 def get_models():
    
     try:
@@ -2755,6 +3109,7 @@ def get_models():
         return jsonify({"error": "Failed to retrieve models"}), 500
 
 @app.route('/api/models/current', methods=['GET'])
+@token_required
 def get_current_model():
     
     try:
@@ -2767,7 +3122,7 @@ def get_current_model():
         return jsonify({"error": "Failed to retrieve current model"}), 500
 
 @app.route('/api/models/switch', methods=['POST'])
-@admin_required
+@token_required
 def switch_model():
   
     try:
@@ -2791,7 +3146,7 @@ def switch_model():
         return jsonify({"error": "Failed to switch model"}), 500
 
 @app.route('/api/models/test', methods=['POST'])
-@admin_required
+@token_required
 def test_model():
     
     try:
@@ -2802,7 +3157,7 @@ def test_model():
         return jsonify({"error": "Failed to test model"}), 500
 
 @app.route('/api/models/config', methods=['POST'])
-@admin_required
+@token_required
 def update_model_config():
    
     try:
@@ -2826,6 +3181,7 @@ def update_model_config():
         return jsonify({"error": "Failed to update model configuration"}), 500
 
 @app.route('/api/graph/<job_id>', methods=['GET'])
+@token_required
 def get_graph_data(job_id):
   
     try:
@@ -2857,7 +3213,7 @@ def get_graph_data(job_id):
         return jsonify({"error": "Failed to retrieve graph data"}), 500
 
 @app.route('/api/r2/test', methods=['POST'])
-@admin_required
+@token_required
 def test_r2_path():
    
     try:
@@ -2917,19 +3273,112 @@ def handle_job_status_request(data):
 def handle_heartbeat(sid):
     emit('heartbeat_response', {'timestamp': datetime.datetime.now().isoformat()})
 
+@app.route('/api/active-re/jobs', methods=['GET'])
+@token_required
+def active_re_jobs():
+    """List local analysis jobs that are ready for Active Reverse Engineering.
+
+    This endpoint connects Local Analysis Jobs with Active RE by providing
+    a list of jobs with their binary paths already resolved.
+    """
+    try:
+        jobs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+
+        if not os.path.exists(jobs_dir):
+            return jsonify({"jobs": [], "count": 0})
+
+        job_directories = [d for d in os.listdir(jobs_dir) if os.path.isdir(os.path.join(jobs_dir, d))]
+
+        active_re_jobs = []
+        for job_id in job_directories:
+            job_info = get_local_job_info(job_id)
+            if job_info.get('found'):
+                active_re_jobs.append({
+                    "job_id": job_id,
+                    "filename": job_info['filename'],
+                    "file_size": job_info['file_size'],
+                    "status": job_info['status'],
+                    "has_memory_layout": job_info['has_memory_layout'],
+                    "ready_for_active_re": job_info['status'] == 'ready_for_active_re'
+                })
+
+      
+        active_re_jobs.sort(key=lambda x: (not x['ready_for_active_re'], x['filename']))
+
+        return jsonify({
+            "jobs": active_re_jobs,
+            "count": len(active_re_jobs),
+            "ready_count": sum(1 for j in active_re_jobs if j['ready_for_active_re'])
+        })
+
+    except Exception as e:
+        log.error(f"Error in active_re_jobs: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve jobs", "details": str(e)}), 500
+
+
+@app.route('/api/active-re/jobs/<job_id>', methods=['GET'])
+@token_required
+def active_re_job_detail(job_id):
+    """Get detailed information about a specific job for Active RE.
+
+    Includes resolved binary_path and all metadata needed for Active RE execution.
+    """
+    try:
+        job_info = get_local_job_info(job_id)
+
+        if not job_info.get('found'):
+            return jsonify({"error": job_info.get('error', 'Job not found')}), 404
+
+     
+        response = {
+            "job_id": job_id,
+            "binary_path": job_info['binary_path'],
+            "filename": job_info['filename'],
+            "file_size": job_info['file_size'],
+            "status": job_info['status'],
+            "has_artifacts": job_info['has_artifacts'],
+            "has_memory_layout": job_info['has_memory_layout'],
+            "ready_for_active_re": job_info['status'] == 'ready_for_active_re',
+            "message": "Job ready for Active RE" if job_info['status'] == 'ready_for_active_re' else "Job needs analysis first"
+        }
+
+        return jsonify(response)
+
+    except Exception as e:
+        log.error(f"Error in active_re_job_detail: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve job details", "details": str(e)}), 500
+
+
 @app.route('/api/active-re/plan', methods=['POST'])
+@token_required
 def active_re_plan():
     try:
         data = request.get_json()
+        job_id = data.get('job_id')
         binary_path = data.get('binary_path')
         analysis_goal = data.get('analysis_goal')
         binary_type = data.get('binary_type')
 
-        if not binary_path or not analysis_goal:
-            return jsonify({"error": "binary_path and analysis_goal are required"}), 400
+        if job_id:
+
+            job_info = get_local_job_info(job_id)
+            if not job_info.get('found'):
+                return jsonify({"error": job_info.get('error', 'Job not found')}), 404
+            binary_path = job_info['binary_path']
+            log.info(f"[Active RE Plan] Resolved job {job_id} to binary: {binary_path}")
+        elif not binary_path:
+            return jsonify({"error": "Either job_id or binary_path is required"}), 400
+
+        if not analysis_goal:
+            return jsonify({"error": "analysis_goal is required"}), 400
 
         active_re_agent = get_active_re_agent()
         plan = active_re_agent.plan_execution_strategy(binary_path, analysis_goal)
+
+       
+        if job_id:
+            plan['job_id'] = job_id
+            plan['resolved_from_job'] = True
 
         return jsonify(plan)
     except Exception as e:
@@ -2937,6 +3386,7 @@ def active_re_plan():
         return jsonify({"error": "Failed to plan active RE execution"}), 500
 
 @app.route('/api/active-re/execute', methods=['POST'])
+@token_required
 def active_re_execute():
     try:
         data = request.get_json()
@@ -2944,11 +3394,24 @@ def active_re_execute():
         binary_path = data.get('binary_path')
         script_content = data.get('script_content')
 
-        if not job_id or not binary_path:
-            return jsonify({"error": "job_id and binary_path are required"}), 400
+     
+        if job_id:
+         
+            job_info = get_local_job_info(job_id)
+            if not job_info.get('found'):
+                return jsonify({"error": job_info.get('error', 'Job not found')}), 404
+            binary_path = job_info['binary_path']
+            log.info(f"[Active RE Execute] Resolved job {job_id} to binary: {binary_path}")
+        elif not binary_path:
+            return jsonify({"error": "Either job_id or binary_path is required"}), 400
 
         active_re_agent = get_active_re_agent()
         result = active_re_agent.execute_with_frida(binary_path, script_content)
+
+     
+        if job_id:
+            result['job_id'] = job_id
+            result['resolved_from_job'] = True
 
         return jsonify(result)
     except Exception as e:
@@ -2956,6 +3419,7 @@ def active_re_execute():
         return jsonify({"error": "Failed to execute active RE"}), 500
 
 @app.route('/api/active-re/monitor', methods=['POST'])
+@token_required
 def active_re_monitor():
     try:
         data = request.get_json()
@@ -2974,6 +3438,7 @@ def active_re_monitor():
         return jsonify({"error": "Failed to monitor active RE"}), 500
 
 @app.route('/api/active-re/chat', methods=['POST'])
+@token_required
 def active_re_chat():
     try:
         data = request.get_json()
@@ -2990,7 +3455,148 @@ def active_re_chat():
         log.error(f"Error in active_re_chat: {e}", exc_info=True)
         return jsonify({"error": "Failed to complete active RE chat"}), 500
 
+@app.route('/api/active-re/ai-suggest-goals', methods=['POST'])
+@token_required
+def active_re_ai_suggest_goals():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        binary_path = data.get('binary_path')
+
+        if not job_id or not binary_path:
+            return jsonify({"error": "job_id and binary_path are required"}), 400
+
+ 
+        active_re_agent = get_active_re_agent()
+        if not active_re_agent.llm_client:
+       
+            suggestions = [
+                "Find security vulnerabilities in the binary",
+                "Analyze the behavior and functionality",
+                "Extract and understand the control flow",
+                "Identify suspicious API calls and functions"
+            ]
+            return jsonify({"suggestions": suggestions})
+
+      
+        prompt = f"""
+        Binary: {binary_path}
+        Job ID: {job_id}
+        
+        Suggest 3-4 specific analysis goals for this binary that would be useful for reverse engineering.
+        Focus on security analysis, behavior understanding, and vulnerability detection.
+        """
+        
+        response = active_re_agent.llm_client.completion(
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+     
+        suggestions = response.strip().split('\n') if response else []
+        
+        return jsonify({"suggestions": suggestions})
+    except Exception as e:
+        log.error(f"Error in active_re_ai_suggest_goals: {e}", exc_info=True)
+       
+        suggestions = [
+            "Find security vulnerabilities in the binary",
+            "Analyze the behavior and functionality"
+        ]
+        return jsonify({"suggestions": suggestions})
+
+@app.route('/api/active-re/ai-generate-frida-script', methods=['POST'])
+@token_required
+def active_re_ai_generate_frida_script():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        binary_path = data.get('binary_path')
+        analysis_goal = data.get('analysis_goal', 'General analysis')
+
+        if not job_id or not binary_path:
+            return jsonify({"error": "job_id and binary_path are required"}), 400
+
+        active_re_agent = get_active_re_agent()
+        if not active_re_agent.llm_client:
+       
+            from core.frida_instrumentation import FridaScriptTemplates
+            script = FridaScriptTemplates.api_call_tracing()
+            return jsonify({"script": script})
+
+       
+        prompt = f"""
+        Binary: {binary_path}
+        Analysis Goal: {analysis_goal}
+        
+        Generate a Frida JavaScript script for dynamic analysis of this binary.
+        The script should:
+        1. Hook relevant API calls based on the analysis goal
+        2. Monitor function calls and parameters
+        3. Log important events
+        4. Be safe and not crash the target application
+        
+        Return only the JavaScript code without any explanations.
+        """
+        
+        response = active_re_agent.llm_client.completion(
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        script = response.strip() if response else ""
+        
+        return jsonify({"script": script})
+    except Exception as e:
+        log.error(f"Error in active_re_ai_generate_frida_script: {e}", exc_info=True)
+       
+        from core.frida_instrumentation import FridaScriptTemplates
+        script = FridaScriptTemplates.api_call_tracing()
+        return jsonify({"script": script})
+
+@app.route('/api/active-re/ai-suggest-analysis', methods=['POST'])
+@token_required
+def active_re_ai_suggest_analysis():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        binary_path = data.get('binary_path')
+
+        if not job_id or not binary_path:
+            return jsonify({"error": "job_id and binary_path are required"}), 400
+
+        active_re_agent = get_active_re_agent()
+        if not active_re_agent.llm_client:
+            suggestions = [
+                "Perform comprehensive security analysis using all available tools",
+                "Analyze control flow and identify suspicious functions",
+                "Monitor network and file system activity during execution"
+            ]
+            return jsonify({"suggestions": suggestions})
+
+        prompt = f"""
+        Binary: {binary_path}
+        Job ID: {job_id}
+        
+        Suggest 3-4 comprehensive analysis requests for the orchestrator.
+        Each request should describe what type of analysis to perform and what tools to use.
+        """
+        
+        response = active_re_agent.llm_client.completion(
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        suggestions = response.strip().split('\n') if response else []
+        
+        return jsonify({"suggestions": suggestions})
+    except Exception as e:
+        log.error(f"Error in active_re_ai_suggest_analysis: {e}", exc_info=True)
+        suggestions = [
+            "Perform comprehensive security analysis using all available tools"
+        ]
+        return jsonify({"suggestions": suggestions})
+        return jsonify({"error": "Failed to complete active RE chat"}), 500
+
 @app.route('/api/orchestrator/plan', methods=['POST'])
+@token_required
 def orchestrator_plan():
     try:
         data = request.get_json()
@@ -3010,6 +3616,7 @@ def orchestrator_plan():
         return jsonify({"error": "Failed to plan orchestrator execution"}), 500
 
 @app.route('/api/orchestrator/execute', methods=['POST'])
+@token_required
 def orchestrator_execute():
     try:
         data = request.get_json()
@@ -3029,6 +3636,7 @@ def orchestrator_execute():
         return jsonify({"error": "Failed to execute orchestrator analysis"}), 500
 
 @app.route('/api/orchestrator/approvals', methods=['GET'])
+@token_required
 def orchestrator_approvals():
     try:
         orchestrator = get_orchestrator_agent()
@@ -3040,6 +3648,7 @@ def orchestrator_approvals():
         return jsonify({"error": "Failed to retrieve orchestrator approvals"}), 500
 
 @app.route('/api/orchestrator/approve', methods=['POST'])
+@token_required
 def orchestrator_approve():
     try:
         data = request.get_json()
@@ -3058,6 +3667,7 @@ def orchestrator_approve():
         return jsonify({"error": "Failed to approve orchestrator operation"}), 500
 
 @app.route('/api/orchestrator/tasks', methods=['GET'])
+@token_required
 def orchestrator_tasks():
     try:
         orchestrator = get_orchestrator_agent()
@@ -3069,6 +3679,7 @@ def orchestrator_tasks():
         return jsonify({"error": "Failed to retrieve graph data"}), 500
 
 @app.route('/api/orchestrator/tasks/<job_id>', methods=['GET'])
+@token_required
 def orchestrator_task_status(job_id):
     try:
         orchestrator = get_orchestrator_agent()
@@ -3083,6 +3694,7 @@ def orchestrator_task_status(job_id):
         return jsonify({"error": "Failed to retrieve task status"}), 500
 
 @app.route('/api/report/generate', methods=['POST'])
+@token_required
 def report_generate():
     try:
         data = request.get_json()
@@ -3102,6 +3714,7 @@ def report_generate():
         return jsonify({"error": "Failed to generate report"}), 500
 
 @app.route('/api/rag/search', methods=['POST'])
+@token_required
 def rag_search():
     try:
         data = request.get_json()
@@ -3124,6 +3737,7 @@ def rag_search():
         return jsonify({"error": "Failed to perform RAG search"}), 500
 
 @app.route('/api/rag/similar-functions', methods=['POST'])
+@token_required
 def rag_similar_functions():
     try:
         data = request.get_json()
@@ -3145,6 +3759,7 @@ def rag_similar_functions():
         return jsonify({"error": "Failed to retrieve similar functions"}), 500
 
 @app.route('/api/rag/vulnerabilities', methods=['POST'])
+@token_required
 def rag_vulnerabilities():
     try:
         data = request.get_json()
@@ -3166,23 +3781,23 @@ def rag_vulnerabilities():
         return jsonify({"error": "Failed to retrieve vulnerability patterns"}), 500
 
 def signal_handler(sig, frame):
-   
+
     print("\n\nReceived interrupt signal. Force closing all connections...")
     try:
-      
+
         for sid in list(connected_clients.keys()):
             try:
                 socketio.disconnect(sid)
             except:
                 pass
-        
-       
+
+
         for room_id in list(room_users.keys()):
             try:
                 socketio.close_room(room_id)
             except:
                 pass
-        
+
         console.print("[yellow]All connections force closed. Exiting...[/yellow]")
     except Exception as e:
         console.print(f"[red]Error during force shutdown: {e}[/red]")

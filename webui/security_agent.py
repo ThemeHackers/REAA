@@ -289,7 +289,6 @@ class SecurityAgent:
             return {"error": f"API call to {endpoint} failed: {str(e)}"}
 
     def _analyze_binary_security(self, job_id: str, file_type: str = "unknown", analysis_depth: str = "standard") -> Dict[str, Any]:
-        """Comprehensive security analysis"""
         analysis = {
             "job_id": job_id,
             "file_type": file_type,
@@ -317,7 +316,6 @@ class SecurityAgent:
         return analysis
 
     def _detect_memory_corruption(self, job_id: str, check_types: List[str] = None) -> Dict[str, Any]:
-        """Detect memory corruption vulnerabilities"""
         if check_types is None:
             check_types = ["buffer_overflow", "heap_overflow", "use_after_free"]
         
@@ -340,7 +338,6 @@ class SecurityAgent:
         return result
 
     def _scan_dangerous_apis(self, job_id: str, api_categories: List[str] = None) -> Dict[str, Any]:
-        """Scan for dangerous API usage"""
         if api_categories is None:
             api_categories = ["memory", "string", "file", "network"]
         
@@ -372,7 +369,6 @@ class SecurityAgent:
         return result
 
     def _analyze_control_flow(self, job_id: str, function_addr: str = None) -> Dict[str, Any]:
-        """Analyze control flow for vulnerabilities"""
         result = {"job_id": job_id, "control_flow_issues": []}
         
         functions = self._call_ghidra_api("list_functions", {"job_id": job_id, "limit": 50})
@@ -398,7 +394,6 @@ class SecurityAgent:
         return result
 
     def _check_input_validation(self, job_id: str, input_sources: List[str] = None) -> Dict[str, Any]:
-        """Check input validation mechanisms"""
         if input_sources is None:
             input_sources = ["user_input", "file", "network"]
         
@@ -430,7 +425,6 @@ class SecurityAgent:
         return result
 
     def _assess_privilege_escalation(self, job_id: str, target_privileges: List[str] = None) -> Dict[str, Any]:
-        """Assess privilege escalation vectors"""
         if target_privileges is None:
             target_privileges = ["admin", "system", "kernel"]
         
@@ -468,7 +462,6 @@ class SecurityAgent:
         return result
 
     def security_analysis_stream(self, user_message: str, job_id: str) -> Generator[str, None, None]:
-        """Stream security analysis response"""
         history = self.load_security_history(job_id)
         
         if not history:
@@ -511,7 +504,6 @@ class SecurityAgent:
                             "content": json.dumps(tool_result)
                         })
 
-            # Get final response
             stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -537,7 +529,6 @@ class SecurityAgent:
             yield json.dumps({"type": "error", "content": f"Security Analysis Error: {str(e)}"})
 
     def generate_security_report(self, job_id: str) -> Dict[str, Any]:
-        """Generate comprehensive security report"""
         analysis = self.load_security_history(job_id)
         
         report = {

@@ -278,6 +278,11 @@
         let currentJobId = null;
         let currentFile = null;
 
+        function getAuthHeaders() {
+            const token = localStorage.getItem('token');
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+
         
         document.addEventListener('DOMContentLoaded', function() {
             loadJobs();
@@ -294,7 +299,7 @@
        
         async function loadJobs() {
             try {
-                const response = await fetch('/api/jobs');
+                const response = await fetch('/api/jobs', { headers: getAuthHeaders() });
                 const data = await response.json();
                 
                 const select = document.getElementById('job-select');
@@ -327,7 +332,7 @@
 
         async function loadPseudocodeFiles(jobId) {
             try {
-                const response = await fetch(`/api/jobs/${jobId}/pseudocode/files`);
+                const response = await fetch(`/api/jobs/${jobId}/pseudocode/files`, { headers: getAuthHeaders() });
                 const data = await response.json();
                 
                 const filesList = document.getElementById('files-list');
@@ -386,7 +391,7 @@
                 document.querySelectorAll('.file-item').forEach(item => item.classList.remove('active'));
                 element.classList.add('active');
                 
-                const response = await fetch(`/api/jobs/${jobId}/pseudocode/${filename}`);
+                const response = await fetch(`/api/jobs/${jobId}/pseudocode/${filename}`, { headers: getAuthHeaders() });
                 const data = await response.json();
                 
                 if (data.error) {
@@ -441,7 +446,7 @@
 
         async function showDiff(jobId, filename) {
             try {
-                const response = await fetch(`/api/jobs/${jobId}/diff/${filename}`);
+                const response = await fetch(`/api/jobs/${jobId}/diff/${filename}`, { headers: getAuthHeaders() });
                 const data = await response.json();
                 
                 if (data.error) {

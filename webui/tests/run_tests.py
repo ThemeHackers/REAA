@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Test Runner Script
-Runs all unit tests for the AI Reverse Engineering system
-"""
 
 import unittest
 import sys
@@ -15,7 +11,6 @@ console = Console()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def run_tests():
-    """Run all unit tests"""
     loader = unittest.TestLoader()
     start_dir = os.path.dirname(os.path.abspath(__file__))
     suite = loader.discover(start_dir, pattern='test_*.py')

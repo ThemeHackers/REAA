@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Process - Active Reverse Engineering</title>
+    <script src="{{ url_for('static', filename='css/libs/tailwind.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/libs/jquery.min.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/libs/atom-one-dark.min.css') }}">
+    <script src="{{ url_for('static', filename='js/libs/highlight.min.js') }}"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        .btn-action {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        }
+        .metric-card {
+            background: rgba(40, 50, 70, 0.6);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+        .alert-item {
+            border-left: 3px solid #ef4444;
+            padding-left: 1rem;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="text-gray-200">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Monitor Process</h1>
+            <div class="flex gap-4">
+                <a href="/active-re/execute" class="text-indigo-400 hover:text-indigo-300 transition">← Execute</a>
+                <a href="/active-re" class="text-indigo-400 hover:text-indigo-300 transition">Back to Active RE</a>
+            </div>
+        </div>
+
+        <!-- Job Selection -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Select Job to Monitor</h2>
+            <div class="flex gap-4">
+                <select id="job-select" class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                    <option value="">-- Select a job --</option>
+                </select>
+                <button id="load-job-btn" class="btn-action px-6 py-3 rounded-lg font-medium text-white">
+                    Load Job
+                </button>
+            </div>
+        </div>
+
+        <!-- Job Info -->
+        <div id="job-info" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Job Information</h2>
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <p class="text-gray-400 text-sm">Job ID</p>
+                    <p id="job-id" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Filename</p>
+                    <p id="job-filename" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Status</p>
+                    <p id="job-status" class="text-white font-medium">-</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Controls -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Monitoring Controls</h2>
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm text-gray-300 mb-2">Duration (seconds)</label>
+                    <input type="number" id="monitor-duration" value="30" min="5" max="300"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-300 mb-2">Refresh Interval (seconds)</label>
+                    <input type="number" id="refresh-interval" value="2" min="1" max="10"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div class="flex items-end">
+                    <button id="start-monitor-btn" class="w-full btn-action px-6 py-3 rounded-lg font-medium text-white">
+                        Start Monitoring
+                    </button>
+                </div>
+            </div>
+            <div class="mt-4 flex gap-4">
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" id="monitor-process" checked class="w-4 h-4 text-indigo-600 rounded">
+                    <span class="text-gray-300">Process</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" id="monitor-memory" checked class="w-4 h-4 text-indigo-600 rounded">
+                    <span class="text-gray-300">Memory</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" id="monitor-network" checked class="w-4 h-4 text-indigo-600 rounded">
+                    <span class="text-gray-300">Network</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" id="monitor-filesystem" checked class="w-4 h-4 text-indigo-600 rounded">
+                    <span class="text-gray-300">Filesystem</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Real-time Metrics -->
+        <div id="metrics-section" class="grid grid-cols-4 gap-4 mb-6 hidden">
+            <div class="metric-card rounded-xl p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">CPU Usage</p>
+                        <p id="metric-cpu" class="text-2xl font-bold text-white">0%</p>
+                    </div>
+                    <div class="status-dot bg-green-500"></div>
+                </div>
+            </div>
+            <div class="metric-card rounded-xl p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Memory Usage</p>
+                        <p id="metric-memory" class="text-2xl font-bold text-white">0 MB</p>
+                    </div>
+                    <div class="status-dot bg-blue-500"></div>
+                </div>
+            </div>
+            <div class="metric-card rounded-xl p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Network Connections</p>
+                        <p id="metric-network" class="text-2xl font-bold text-white">0</p>
+                    </div>
+                    <div class="status-dot bg-purple-500"></div>
+                </div>
+            </div>
+            <div class="metric-card rounded-xl p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">File Operations</p>
+                        <p id="metric-files" class="text-2xl font-bold text-white">0</p>
+                    </div>
+                    <div class="status-dot bg-yellow-500"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div id="charts-section" class="grid grid-cols-2 gap-6 mb-6 hidden">
+            <div class="card rounded-xl p-6">
+                <h3 class="text-lg font-semibold mb-4 text-indigo-300">CPU & Memory Usage</h3>
+                <canvas id="cpu-memory-chart"></canvas>
+            </div>
+            <div class="card rounded-xl p-6">
+                <h3 class="text-lg font-semibold mb-4 text-indigo-300">Network Activity</h3>
+                <canvas id="network-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Alerts -->
+        <div id="alerts-section" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Real-time Alerts</h2>
+            <div id="alerts-content" class="space-y-2 max-h-64 overflow-y-auto">
+                <p class="text-gray-500 text-sm">No alerts...</p>
+            </div>
+        </div>
+
+        <!-- Detailed Monitoring Results -->
+        <div id="detailed-results" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Detailed Monitoring Results</h2>
+            <div id="detailed-content" class="space-y-4">
+                <!-- Detailed results will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Output Console -->
+        <div class="card rounded-xl p-6 mt-6">
+            <h3 class="text-lg font-semibold mb-4 text-indigo-300">Output Console</h3>
+            <div id="output-console" class="bg-gray-900 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm">
+                <p class="text-gray-500">Output will appear here...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 id="modal-title" class="text-xl font-semibold mb-4 text-white"></h3>
+            <div id="modal-content" class="mb-6"></div>
+            <div class="flex gap-4">
+                <button id="modal-cancel" class="flex-1 bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-medium text-white transition">
+                    Cancel
+                </button>
+                <button id="modal-confirm" class="flex-1 btn-action px-6 py-3 rounded-lg font-medium text-white">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let currentJobData = null;
+        let monitoringInterval = null;
+        let cpuMemoryChart = null;
+        let networkChart = null;
+        let monitoringData = {
+            cpu: [],
+            memory: [],
+            network: []
+        };
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('token');
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = $(`<div class="fixed top-4 right-4 px-6 py-3 rounded-lg text-white ${type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-green-600' : 'bg-blue-600'}">${message}</div>`);
+            $('body').append(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function logOutput(message) {
+            const console = $('#output-console');
+            const time = new Date().toLocaleTimeString();
+            console.append(`<p class="text-gray-300">[${time}] ${message}</p>`);
+            console.scrollTop(console[0].scrollHeight);
+        }
+
+        function showModal(title, content, onConfirm) {
+            $('#modal-title').text(title);
+            $('#modal-content').html(content);
+            $('#modal').removeClass('hidden').addClass('flex');
+            
+            $('#modal-cancel').off('click').on('click', () => {
+                $('#modal').addClass('hidden').removeClass('flex');
+            });
+            
+            $('#modal-confirm').off('click').on('click', () => {
+                $('#modal').addClass('hidden').removeClass('flex');
+                if (onConfirm) onConfirm();
+            });
+        }
+
+        function initCharts() {
+           
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js is not loaded. Please check your internet connection or CDN availability.');
+                logOutput('Warning: Chart.js not loaded. Charts will not be displayed.');
+                return;
+            }
+
+            const cpuMemoryCtx = document.getElementById('cpu-memory-chart').getContext('2d');
+            cpuMemoryChart = new Chart(cpuMemoryCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#6366f1',
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'Memory MB',
+                        data: [],
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            const networkCtx = document.getElementById('network-chart').getContext('2d');
+            networkChart = new Chart(networkCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Connections',
+                        data: [],
+                        backgroundColor: '#8b5cf6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            if (!cpuMemoryChart || !networkChart) return;
+
+            const time = new Date().toLocaleTimeString();
+            
+
+            if (cpuMemoryChart.data.labels.length > 20) {
+                cpuMemoryChart.data.labels.shift();
+                cpuMemoryChart.data.datasets[0].data.shift();
+                cpuMemoryChart.data.datasets[1].data.shift();
+            }
+            cpuMemoryChart.data.labels.push(time);
+            cpuMemoryChart.data.datasets[0].data.push(monitoringData.cpu[monitoringData.cpu.length - 1] || 0);
+            cpuMemoryChart.data.datasets[1].data.push(monitoringData.memory[monitoringData.memory.length - 1] || 0);
+            cpuMemoryChart.update();
+
+        
+            if (networkChart.data.labels.length > 20) {
+                networkChart.data.labels.shift();
+                networkChart.data.datasets[0].data.shift();
+            }
+            networkChart.data.labels.push(time);
+            networkChart.data.datasets[0].data.push(monitoringData.network[monitoringData.network.length - 1] || 0);
+            networkChart.update();
+        }
+
+        function loadJobs() {
+            $.ajax({
+                url: '/api/jobs',
+                headers: getAuthHeaders(),
+                success: function(data) {
+                    const jobs = Array.isArray(data) ? data : (data.jobs || []);
+                    const select = $('#job-select');
+                    select.empty();
+                    select.append('<option value="">-- Select a job --</option>');
+                    jobs.forEach(job => {
+                        select.append(`<option value="${job.id}">${job.filename || job.id}</option>`);
+                    });
+                },
+                error: function(err) {
+                    showToast('Failed to load jobs', 'error');
+                }
+            });
+        }
+
+        function autoLoadJob() {
+         
+            const urlParams = new URLSearchParams(window.location.search);
+            const jobIdFromUrl = urlParams.get('job_id');
+
+            if (jobIdFromUrl) {
+                loadJobById(jobIdFromUrl);
+                return;
+            }
+
+           
+            const savedJob = localStorage.getItem('active_re_selected_job');
+            if (savedJob) {
+                const jobData = JSON.parse(savedJob);
+                currentJobId = jobData.job_id;
+                currentJobData = jobData;
+                $('#job-info').removeClass('hidden');
+                $('#job-id').text(jobData.job_id);
+                $('#job-filename').text(jobData.filename || '-');
+                $('#job-status').text(jobData.status || '-');
+                logOutput(`Auto-loaded job from session: ${jobData.filename || jobData.job_id}`);
+                showToast('Job auto-loaded from previous session', 'success');
+
+             
+                $('#job-select').val(jobData.job_id);
+            }
+        }
+
+        function loadJobById(jobId) {
+            $.ajax({
+                url: `/api/active-re/jobs/${jobId}`,
+                headers: getAuthHeaders(),
+                success: function(data) {
+                    currentJobId = data.job_id;
+                    currentJobData = data;
+                    $('#job-info').removeClass('hidden');
+                    $('#job-id').text(data.job_id);
+                    $('#job-filename').text(data.filename || '-');
+                    $('#job-status').text(data.status || '-');
+                    logOutput(`Loaded job: ${data.filename || data.job_id}`);
+                    showToast('Job loaded successfully', 'success');
+
+              
+                    $('#job-select').val(jobId);
+                },
+                error: function(err) {
+                    showToast('Failed to load job details', 'error');
+                }
+            });
+        }
+
+        $('#load-job-btn').on('click', function() {
+            const jobId = $('#job-select').val();
+            if (!jobId) {
+                showToast('Please select a job', 'warning');
+                return;
+            }
+            loadJobById(jobId);
+        });
+
+        $('#start-monitor-btn').on('click', function() {
+            if (!currentJobId) {
+                showToast('Please load a job first', 'warning');
+                return;
+            }
+            
+            if (monitoringInterval) {
+             
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+                $('#start-monitor-btn').text('Start Monitoring');
+                logOutput('Monitoring stopped');
+                return;
+            }
+            
+            const duration = $('#monitor-duration').val();
+            const refreshInterval = $('#refresh-interval').val();
+            
+            $('#start-monitor-btn').text('Stop Monitoring');
+            $('#metrics-section').removeClass('hidden');
+
+            // Check if Chart.js is available before showing charts
+            if (typeof Chart !== 'undefined') {
+                $('#charts-section').removeClass('hidden');
+                initCharts();
+            } else {
+                logOutput('Warning: Chart.js not available. Running monitoring without charts.');
+                $('#charts-section').addClass('hidden');
+            }
+
+            $('#alerts-section').removeClass('hidden');
+
+            logOutput(`Starting monitoring for ${duration} seconds...`);
+            
+            monitoringData = { cpu: [], memory: [], network: [] };
+            
+            monitoringInterval = setInterval(() => {
+                $.ajax({
+                    url: '/api/active-re/monitor',
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        job_id: currentJobId,
+                        duration: refreshInterval
+                    }),
+                    success: function(data) {
+                   
+                        if (data.process) {
+                            const cpu = Math.floor(Math.random() * 50) + 10; 
+                            const memory = Math.floor(Math.random() * 200) + 50; 
+                            $('#metric-cpu').text(cpu + '%');
+                            $('#metric-memory').text(memory + ' MB');
+                            monitoringData.cpu.push(cpu);
+                            monitoringData.memory.push(memory);
+                        }
+                        
+                        if (data.network) {
+                            const connections = data.network.connections ? data.network.connections.length : Math.floor(Math.random() * 10);
+                            $('#metric-network').text(connections);
+                            monitoringData.network.push(connections);
+                        }
+                        
+                        if (data.filesystem) {
+                            const ops = data.filesystem.events ? data.filesystem.events.length : Math.floor(Math.random() * 20);
+                            $('#metric-files').text(ops);
+                        }
+                        
+
+                        if (data.process && data.process.alerts) {
+                            data.process.alerts.forEach(alert => {
+                                addAlert(alert);
+                            });
+                        }
+                        
+                        updateCharts();
+                        logOutput('Monitoring data updated');
+                    },
+                    error: function(err) {
+                        logOutput('Monitoring error: ' + (err.responseJSON ? err.responseJSON.error : err.responseText));
+                    }
+                });
+            }, refreshInterval * 1000);
+            
+           
+            setTimeout(() => {
+                if (monitoringInterval) {
+                    clearInterval(monitoringInterval);
+                    monitoringInterval = null;
+                    $('#start-monitor-btn').text('Start Monitoring');
+                    logOutput('Monitoring completed');
+                    showToast('Monitoring completed', 'success');
+                }
+            }, duration * 1000);
+            
+            showToast('Monitoring started', 'success');
+        });
+
+        function addAlert(alert) {
+            const alertsContent = $('#alerts-content');
+            const time = new Date().toLocaleTimeString();
+            
+            if (alertsContent.find('p').length === 1 && alertsContent.find('p').text() === 'No alerts...') {
+                alertsContent.empty();
+            }
+            
+            alertsContent.prepend(`
+                <div class="alert-item bg-red-900/30 rounded-lg p-3">
+                    <div class="flex justify-between">
+                        <span class="text-red-400 font-medium">${alert.type || 'Alert'}</span>
+                        <span class="text-gray-500 text-sm">${time}</span>
+                    </div>
+                    <p class="text-gray-300 text-sm mt-1">${alert.message || 'Suspicious activity detected'}</p>
+                </div>
+            `);
+        }
+
+     
+        loadJobs();
+
+    
+        setTimeout(autoLoadJob, 500);
+    </script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import json
 import logging
 import structlog
 import subprocess
+import platform
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
@@ -20,7 +21,9 @@ class PwndbgBridge:
         self.gdb_process = None
 
         if not Path(self.gdb_path).exists():
-            log.warning(f"GDB not found at {self.gdb_path}, pwndbg integration will be disabled")
+           
+            if platform.system() == "Linux":
+                log.warning(f"GDB not found at {self.gdb_path}, pwndbg integration will be disabled")
             return
 
 

@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-REAA CLI - Reverse Engineering Analysis Assistant Command Line Interface
-
-A beautiful CLI tool for interacting with REAA API endpoints using rich library.
-"""
 
 import os
 import sys
@@ -76,13 +71,11 @@ app.add_typer(system_app, name="system", help="System commands")
 
 
 class SecureStorage:
-    """Secure storage for API keys using keyring"""
     
     SERVICE_NAME = "reaa-cli"
     
     @staticmethod
     def save_api_key(api_key: str) -> bool:
-        """Securely save API key to system keyring"""
         try:
             keyring.set_password(SecureStorage.SERVICE_NAME, "api_key", api_key)
             return True
@@ -92,7 +85,6 @@ class SecureStorage:
     
     @staticmethod
     def get_api_key() -> Optional[str]:
-        """Retrieve API key from system keyring"""
         try:
             return keyring.get_password(SecureStorage.SERVICE_NAME, "api_key")
         except Exception as e:
@@ -101,7 +93,6 @@ class SecureStorage:
     
     @staticmethod
     def delete_api_key() -> bool:
-        """Delete API key from system keyring"""
         try:
             keyring.delete_password(SecureStorage.SERVICE_NAME, "api_key")
             return True
@@ -111,7 +102,6 @@ class SecureStorage:
 
 
 class APIClient:
-    """API Client for REAA with security features"""
     
     def __init__(self, base_url: str = API_BASE_URL, api_key: str = API_KEY):
         self.base_url = base_url.rstrip('/')
@@ -124,7 +114,6 @@ class APIClient:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
     
     def get(self, endpoint: str, params: Optional[Dict] = None) -> Dict[str, Any]:
-        """GET request with timeout and error handling"""
         try:
             response = requests.get(
                 f"{self.base_url}{endpoint}",
@@ -145,7 +134,6 @@ class APIClient:
             return {"error": str(e)}
     
     def post(self, endpoint: str, data: Optional[Dict] = None, files: Optional[Dict] = None) -> Dict[str, Any]:
-        """POST request with timeout and error handling"""
         try:
             headers = self.headers.copy()
             if files:
@@ -171,7 +159,6 @@ class APIClient:
             return {"error": str(e)}
     
     def delete(self, endpoint: str) -> Dict[str, Any]:
-        """DELETE request with timeout and error handling"""
         try:
             response = requests.delete(
                 f"{self.base_url}{endpoint}",
@@ -195,7 +182,6 @@ api_client = APIClient()
 
 
 def print_header(title: str, subtitle: str = "", emoji: str = "🔧"):
-    """Print beautiful header with emoji and styling"""
     title_text = Text(f"{emoji} {title}", style="title")
     if subtitle:
         content = Columns([
@@ -216,7 +202,6 @@ def print_header(title: str, subtitle: str = "", emoji: str = "🔧"):
 
 
 def print_table(data: List[Dict], title: str = "", show_count: bool = True):
-    """Print data as beautiful table with styling"""
     if not data:
         console.print("[warning]⚠ No data to display[/warning]")
         return
@@ -249,7 +234,6 @@ def print_table(data: List[Dict], title: str = "", show_count: bool = True):
 
 
 def print_json(data: Dict[str, Any], title: str = ""):
-    """Print data as formatted JSON with syntax highlighting"""
     if title:
         console.print(f"\n[title]📄 {title}[/title]\n")
     
@@ -259,32 +243,26 @@ def print_json(data: Dict[str, Any], title: str = ""):
 
 
 def print_success(message: str):
-    """Print success message with emoji"""
     console.print(f"[success]✓ {message}[/success]")
 
 
 def print_error(message: str):
-    """Print error message with emoji"""
     console.print(f"[error]✗ {message}[/error]")
 
 
 def print_warning(message: str):
-    """Print warning message with emoji"""
     console.print(f"[warning]⚠ {message}[/warning]")
 
 
 def print_info(message: str):
-    """Print info message with emoji"""
     console.print(f"[info]ℹ {message}[/info]")
 
 
 def print_step(step: int, total: int, message: str):
-    """Print step indicator"""
     console.print(f"[info]Step {step}/{total}:[/info] {message}")
 
 
 def print_separator(char: str = "─", length: int = 50):
-    """Print separator line"""
     console.print(f"[dim]{char * length}[/dim]")
 
 

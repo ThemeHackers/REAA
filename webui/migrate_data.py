@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Data Migration Script
-Migrates existing file-based job data to database
-"""
 
 import os
 import sys
@@ -20,7 +16,6 @@ from app import app
 from models import db, Job, ChatHistory, SecurityReport
 
 def migrate_jobs():
-    """Migrate job data from file system to database"""
     data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
 
     if not os.path.exists(data_dir):
@@ -56,7 +51,7 @@ def migrate_jobs():
                 filename=status_data.get('filename', 'Unknown'),
                 file_path=job_path,
                 status=status_data.get('status', 'unknown'),
-                priority=5,  
+                priority=5,
                 file_size=status_data.get('file_size'),
                 created_at=datetime.datetime.fromtimestamp(status_data.get('created_at', 0)) if status_data.get('created_at') else datetime.datetime.utcnow(),
                 error_message=status_data.get('error_message')
@@ -110,7 +105,6 @@ def migrate_jobs():
         console.print(f"[red]Error committing to database: {str(e)}[/red]")
 
 def create_default_admin():
-    """Create default admin user"""
     from models import User
 
     admin_password = os.getenv('ADMIN_PASSWORD')

@@ -2,7 +2,9 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
+
+RUN dpkg --add-architecture i386 && \
+    apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-dev \
@@ -28,19 +30,20 @@ RUN apt-get update && apt-get install -y \
     libc6-dev \
     libssl-dev \
     libffi-dev \
+    wine \
+    wine32 \
+    wine64 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir \
     frida>=16.0.0 \
     frida-tools>=12.0.0 \
     angr>=9.2.0 \
-    pydantic-ai>=0.0.0 \
     cle>=9.1.0 \
     pyelftools>=0.29 \
     psutil>=5.9.0 \
     pyshark>=0.4.5 \
-    websockets>=11.0.0 \
-    pwndbg
+    websockets>=11.0.0
 
 RUN mkdir -p /app/frida_scripts
 RUN mkdir -p /app/data

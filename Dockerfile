@@ -41,7 +41,6 @@ COPY requirements.txt .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-RUN pip3 install --no-cache-dir pwndbg
 
 RUN pip3 install --no-index --find-links=/opt/ghidra/Ghidra/Features/PyGhidra/pypkg/dist pyghidra
 

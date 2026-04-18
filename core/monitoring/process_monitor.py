@@ -5,7 +5,7 @@ import structlog
 import psutil
 import subprocess
 import threading
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 
 log = structlog.get_logger()

@@ -34,5 +34,5 @@ cle>=9.1.0
 pyelftools>=0.29
 chromadb>=0.4.0
 sentence-transformers>=2.2.0
-pyshark>=0.4.5
+pyshark>=0.6
 websockets>=11.0.0

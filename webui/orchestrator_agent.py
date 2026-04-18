@@ -27,7 +27,7 @@ class OrchestratorAgent:
     def __init__(self):
         self.ghidra_assistant = None
         self.security_agent = None
-        self.active_re_agent = get_active_re_agent()
+        self.active_re_agent = None
         self.pending_approvals: List[Dict[str, Any]] = []
         self.active_tasks: Dict[str, Dict[str, Any]] = {}
         self.task_history: List[Dict[str, Any]] = []
@@ -41,6 +41,15 @@ class OrchestratorAgent:
             "risk_tolerance": "medium",
             "analysis_depth": "standard"
         }
+
+    def _get_active_re_agent(self):
+        """Lazy initialization of active_re_agent"""
+        if self.active_re_agent is None:
+            try:
+                self.active_re_agent = get_active_re_agent()
+            except Exception as e:
+                log.error(f"Failed to initialize active_re_agent: {e}")
+        return self.active_re_agent
 
     def initialize_agents(self, ghidra_api_base: str):
         """Initialize the static analysis agents"""
@@ -59,7 +68,7 @@ class OrchestratorAgent:
     ) -> Dict[str, Any]:
         """Decide which analysis strategy to use"""
         strategy = {
-            "mode": AnalysisMode.STATIC,
+            "mode": AnalysisMode.STATIC.value,
             "reasoning": "",
             "agents_to_use": [],
             "requires_approval": False,
@@ -70,21 +79,21 @@ class OrchestratorAgent:
             request_lower = user_request.lower()
 
             if any(keyword in request_lower for keyword in ["run", "execute", "dynamic", "runtime"]):
-                strategy["mode"] = AnalysisMode.DYNAMIC
+                strategy["mode"] = AnalysisMode.DYNAMIC.value
                 strategy["agents_to_use"] = ["active_re"]
                 strategy["reasoning"] = "User requested dynamic/execution analysis"
                 strategy["requires_approval"] = True
                 strategy["estimated_time"] = 300
 
             elif any(keyword in request_lower for keyword in ["both", "hybrid", "complete", "thorough"]):
-                strategy["mode"] = AnalysisMode.HYBRID
+                strategy["mode"] = AnalysisMode.HYBRID.value
                 strategy["agents_to_use"] = ["ghidra", "security", "active_re"]
                 strategy["reasoning"] = "User requested comprehensive analysis"
                 strategy["requires_approval"] = True
                 strategy["estimated_time"] = 600
 
             else:
-                strategy["mode"] = AnalysisMode.STATIC
+                strategy["mode"] = AnalysisMode.STATIC.value
                 strategy["agents_to_use"] = ["ghidra", "security"]
                 strategy["reasoning"] = "Default to static analysis for safety"
                 strategy["requires_approval"] = False
@@ -337,19 +346,19 @@ class OrchestratorAgent:
 
       
         if self.user_preferences["preferred_mode"]:
-            base_strategy["mode"] = AnalysisMode(self.user_preferences["preferred_mode"])
+            base_strategy["mode"] = self.user_preferences["preferred_mode"]
             base_strategy["reasoning"] += f" (user prefers {self.user_preferences['preferred_mode']} mode)"
 
        
         if self.user_preferences["risk_tolerance"] == "low":
            
-            if base_strategy["mode"] in [AnalysisMode.DYNAMIC, AnalysisMode.HYBRID]:
-                base_strategy["mode"] = AnalysisMode.STATIC
+            if base_strategy["mode"] in [AnalysisMode.DYNAMIC.value, AnalysisMode.HYBRID.value]:
+                base_strategy["mode"] = AnalysisMode.STATIC.value
                 base_strategy["reasoning"] += " (low risk tolerance preference)"
         elif self.user_preferences["risk_tolerance"] == "high":
           
-            if base_strategy["mode"] == AnalysisMode.STATIC:
-                base_strategy["mode"] = AnalysisMode.HYBRID
+            if base_strategy["mode"] == AnalysisMode.STATIC.value:
+                base_strategy["mode"] = AnalysisMode.HYBRID.value
                 base_strategy["reasoning"] += " (high risk tolerance preference)"
 
        
@@ -357,12 +366,12 @@ class OrchestratorAgent:
             perf = self.strategy_performance[mode]
             if perf["total_count"] > 5 and perf["success_count"] / perf["total_count"] < 0.5:
                
-                if base_strategy["mode"].value == mode:
+                if base_strategy["mode"] == mode:
                     if mode == "dynamic":
-                        base_strategy["mode"] = AnalysisMode.STATIC
+                        base_strategy["mode"] = AnalysisMode.STATIC.value
                         base_strategy["reasoning"] += " (dynamic has low success rate)"
                     elif mode == "static":
-                        base_strategy["mode"] = AnalysisMode.HYBRID
+                        base_strategy["mode"] = AnalysisMode.HYBRID.value
                         base_strategy["reasoning"] += " (static has low success rate)"
 
         return base_strategy

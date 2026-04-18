@@ -325,7 +325,7 @@ class GPUMonitor:
                         power_limit = float(values[6].strip()) if len(values) > 6 else 0
                         graphics_clock_mhz = int(values[7].strip()) if len(values) > 7 else 0
                         memory_clock_base_mhz = int(values[8].strip()) if len(values) > 8 else 0
-                        fan_speed_percent = int(values[9].strip()) if len(values) > 9 else 0
+                        fan_speed_percent = int(values[9].strip()) if len(values) > 9 else None
 
 
                         

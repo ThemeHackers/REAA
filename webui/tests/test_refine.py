@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""
-Test script for LLM refiner to verify device mismatch fix
-"""
 import os
 import sys
 import time
@@ -41,7 +38,6 @@ except ImportError:
 from core.llm_refiner import get_refiner
 
 def test_refiner():
-    """Test LLM refiner with a simple pseudocode"""
     console.print(Panel(
         "[bold cyan]Testing LLM Refiner[/bold cyan]",
         title="[bold]REAA Test[/bold]",
