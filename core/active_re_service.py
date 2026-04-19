@@ -62,7 +62,7 @@ class ActiveRESandbox:
                 mem_limit=settings.ACTIVE_RE_MAX_MEMORY,
                 cpu_quota=int(settings.ACTIVE_RE_MAX_CPU * 100000),
                 volumes={
-                    str(data_dir): {
+                    str(data_dir).replace('\\', '/'): {
                         'bind': '/app/data',
                         'mode': 'rw'
                     }
