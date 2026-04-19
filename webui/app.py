@@ -219,19 +219,19 @@ r2_bridge = Radare2Bridge()
 r2_agent = Radare2AgentController(r2_bridge)
 
 
-# try:
-#     import sys
-#     import os
-#     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-#     from core.llm_refiner import get_refiner, initialize_refiner
-#     console.print("[STARTUP] Pre-loading LLM refiner model...")
-#     refiner_loaded = initialize_refiner()
-#     if refiner_loaded:
-#         console.print("[green][STARTUP] [OK] LLM refiner model loaded successfully[/green]")
-#     else:
-#         console.print("[yellow][STARTUP] [WARNING] LLM refiner model failed to load (will load on first use)[/yellow]")
-# except Exception as e:
-#     console.print(f"[red][STARTUP] [ERROR] Failed to pre-load LLM refiner: {e}[/red]")
+try:
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from core.llm_refiner import get_refiner, initialize_refiner
+    console.print("[STARTUP] Pre-loading LLM refiner model...")
+    refiner_loaded = initialize_refiner()
+    if refiner_loaded:
+        console.print("[green][STARTUP] [OK] LLM refiner model loaded successfully[/green]")
+    else:
+        console.print("[yellow][STARTUP] [WARNING] LLM refiner model failed to load (will load on first use)[/yellow]")
+except Exception as e:
+    console.print(f"[red][STARTUP] [ERROR] Failed to pre-load LLM refiner: {e}[/red]")
 
 
 session_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.session.json')
@@ -971,24 +971,25 @@ def api_docker_status():
     try:
 
         result = subprocess.run(
-            ['docker', 'ps', '--format', '{{.Names}}|{{.Status}}|{{.Ports}}'],
+            ['docker', 'ps', '--format', '{{.ID}}|{{.Names}}|{{.Status}}|{{.Ports}}'],
             capture_output=True,
             text=True,
             timeout=10
         )
-        
+
 
         allowed_containers = {'ghidra-redis', 'ghidra-celery-beat', 'ghidra-celery-worker', 'ghidra-api'}
-        
+
         containers = []
         if result.returncode == 0:
             for line in result.stdout.strip().split('\n'):
                 if line:
                     parts = line.split('|')
-                    if len(parts) >= 2:
-                        name = parts[0]
-                        status = parts[1]
-                        ports = parts[2] if len(parts) > 2 else ''
+                    if len(parts) >= 3:
+                        container_id = parts[0]
+                        name = parts[1]
+                        status = parts[2]
+                        ports = parts[3] if len(parts) > 3 else ''
                         
                      
                         if name not in allowed_containers:
@@ -1004,6 +1005,7 @@ def api_docker_status():
                             health = 'running'
                         
                         containers.append({
+                            'container_id': container_id,
                             'name': name,
                             'status': status,
                             'health': health,
@@ -1043,22 +1045,40 @@ def api_docker_status():
 def api_docker_logs(container_name):
     try:
         lines = request.args.get('lines', 50, type=int)
+        log.info(f"Getting logs for container: {container_name}, lines: {lines}")
+
         result = subprocess.run(
             ['docker', 'logs', '--tail', str(lines), container_name],
             capture_output=True,
             text=True,
             timeout=10
         )
-        
-        if result.returncode == 0:
-            return jsonify({
+
+        log.info(f"Docker logs command return code: {result.returncode}")
+        log.info(f"Docker logs stdout length: {len(result.stdout) if result.stdout else 0}")
+        log.info(f"Docker logs stderr: {result.stderr if result.stderr else 'None'}")
+
+      
+        logs = result.stdout if result.stdout else ""
+        if result.stderr:
+            logs += "\n" + result.stderr
+
+       
+        if logs.strip():
+            response_data = {
                 'container': container_name,
-                'logs': result.stdout,
-                'error': result.stderr if result.stderr else None
-            })
+                'logs': logs
+            }
+            return jsonify(response_data)
+        elif result.returncode != 0:
+            return jsonify({
+                'error': f'Failed to get logs: {result.stderr if result.stderr else "Unknown error"}',
+                'returncode': result.returncode
+            }), 500
         else:
             return jsonify({
-                'error': f'Failed to get logs: {result.stderr}'
+                'error': f'Failed to get logs: {result.stderr if result.stderr else "Unknown error"}',
+                'returncode': result.returncode
             }), 500
     except subprocess.TimeoutExpired:
         log.error("Docker logs command timeout", exc_info=True)
@@ -1534,12 +1554,36 @@ def r2_status():
 @app.route('/api/r2/analyze', methods=['POST'])
 @token_required
 def r2_analyze():
+    log.info(f"r2_analyze called - files in request: {list(request.files.keys()) if request.files else 'None'}")
+    log.info(f"r2_analyze called - content type: {request.content_type}")
+
+  
+    if 'file' in request.files:
+        file = request.files['file']
+        if file.filename:
+            log.info(f"Processing uploaded file: {file.filename}")
+          
+            temp_dir = tempfile.mkdtemp(prefix="r2_upload_")
+            file_path = os.path.join(temp_dir, file.filename)
+            file.save(file_path)
+
+            try:
+                result = r2_bridge.analyze_file(file_path)
+                return jsonify(result)
+            finally:
+        
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    
     data = request.get_json()
-    file_path = data.get('file_path')
-    
+    log.info(f"JSON data received: {data}")
+    file_path = data.get('file_path') if data else None
+
     if not file_path:
-        return jsonify({"error": "File path required"}), 400
-    
+        log.error("No file_path in JSON data")
+        return jsonify({"error": "File upload or file_path required"}), 400
+
+    log.info(f"Analyzing file at path: {file_path}")
     result = r2_bridge.analyze_file(file_path)
     return jsonify(result)
 

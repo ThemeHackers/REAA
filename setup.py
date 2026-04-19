@@ -10,12 +10,23 @@ from pathlib import Path
 import shutil
 from pathlib import Path
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.status import Status
-from rich.text import Text
-from rich import print as rprint
+
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich.status import Status
+    from rich.text import Text
+    from rich import print as rprint
+except ImportError:
+    print("Installing rich package...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "rich"], check=True)
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich.status import Status
+    from rich.text import Text
+    from rich import print as rprint
 
 
 console = Console()
