@@ -389,11 +389,37 @@ For detailed CLI documentation, see [cli/README.md](cli/README.md)
 ### Installation
 
 ```bash
+# Activate virtual environment first
+.venv\Scripts\activate
+
+# Navigate to CLI directory
 cd cli
-pip install -r requirements.txt
+
+# Install CLI in editable mode
+pip install -e .
 ```
 
 ### Configuration
+
+**Authentication Required:**
+
+Most CLI commands require authentication. You must login first:
+
+```bash
+# Register if you don't have an account
+reaa auth register --username <username> --email <email> --password <password>
+
+# Login with your credentials
+reaa auth login --username <username> --password <password>
+
+# Check if you're logged in
+reaa auth me
+
+# Logout when done
+reaa auth logout
+```
+
+**API Configuration:**
 
 ```bash
 # Set API URL
@@ -441,13 +467,16 @@ reaa system logs ghidra-api --lines 100
 ### Command Groups
 
 - **auth**: Authentication (register, login, logout, me)
-- **analysis**: Binary analysis (upload, jobs, status, delete, download)
-- **security**: Security analysis (analyze, report, scan)
+- **analysis**: Binary analysis (upload, jobs, status, delete, download, memory, memory-hex, memory-analysis, memory-strings, memory-xref, memory-compare, memory-search)
+- **security**: Security analysis (analyze, report, audit, metrics, scan)
 - **active-re**: Active Reverse Engineering (plan, execute, monitor, chat)
 - **rag**: RAG (search, similar-functions, vulnerabilities)
 - **orchestrator**: Orchestrator (plan, execute, tasks, approve)
-- **r2**: Radare2 integration (status, analyze, functions)
+- **r2**: Radare2 integration (status, functions)
 - **system**: System monitoring (docker, gpu, logs)
+- **remote**: Remote collaboration (health, server-status, jobs, room-users, api-keys, create-key, delete-key)
+- **models**: AI model management (list, current)
+- **settings**: Configuration settings
 
 ### Features
 
