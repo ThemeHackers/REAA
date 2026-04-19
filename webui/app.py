@@ -248,7 +248,8 @@ if os.path.exists(session_file):
         with open(session_file, 'r') as f:
             session_data = json.load(f)
     
-        auth_manager.create_session(session_data['user_id'], session_data['token'])
+        with app.app_context():
+            auth_manager.create_session(session_data['user_id'], session_data['token'])
         console.print("[green][STARTUP] [OK] Session restored from .session.json[/green]")
     except Exception as e:
         console.print(f"[yellow][STARTUP] [WARNING] Failed to load session: {e}[/yellow]")
