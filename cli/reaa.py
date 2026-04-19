@@ -3,6 +3,7 @@
 import os
 import sys
 import json
+import subprocess
 import requests
 import getpass
 import keyring
@@ -41,7 +42,7 @@ custom_theme = Theme({
 
 console = Console(theme=custom_theme)
 
-API_BASE_URL = os.getenv("REAA_API_URL", "http://127.0.0.1:8000")
+API_BASE_URL = os.getenv("REAA_API_URL", "http://127.0.0.1:5000")
 API_KEY = os.getenv("REAA_API_KEY", "")
 
 app = typer.Typer(
@@ -101,8 +102,15 @@ class SecureStorage:
             return False
 
 
+def show_auth_required_warning():
+    """Show authentication required warning message"""
+    console.print("\n[yellow][WARNING] Authentication required - You are not logged in[/yellow]")
+    console.print("[yellow][WARNING] Authentication required - Please login first[/yellow]")
+    console.print("[info]Use: reaa auth login --username <username> --password <password>[/info]")
+
+
 class APIClient:
-    
+
     def __init__(self, base_url: str = API_BASE_URL, api_key: str = API_KEY):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key or SecureStorage.get_api_key() or ""
@@ -112,7 +120,12 @@ class APIClient:
         }
         if self.api_key:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
-    
+
+    def _handle_401_error(self) -> bool:
+        """Handle 401 unauthorized error by showing warning message"""
+        show_auth_required_warning()
+        return True
+
     def get(self, endpoint: str, params: Optional[Dict] = None) -> Dict[str, Any]:
         try:
             response = requests.get(
@@ -121,6 +134,9 @@ class APIClient:
                 params=params,
                 timeout=30
             )
+            if response.status_code == 401:
+                self._handle_401_error()
+                return {"error": "Unauthorized"}
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout:
@@ -138,14 +154,19 @@ class APIClient:
             headers = self.headers.copy()
             if files:
                 headers.pop("Content-Type", None)
-            
+
+         
             response = requests.post(
                 f"{self.base_url}{endpoint}",
                 headers=headers,
-                json=data,
+                data=data if files else data,
+                json=data if not files else None,
                 files=files,
                 timeout=300
             )
+            if response.status_code == 401:
+                self._handle_401_error()
+                return {"error": "Unauthorized"}
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout:
@@ -165,6 +186,9 @@ class APIClient:
                 headers=self.headers,
                 timeout=30
             )
+            if response.status_code == 401:
+                self._handle_401_error()
+                return {"error": "Unauthorized"}
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout:
@@ -275,20 +299,47 @@ def version():
 
 
 @app.command()
+def run():
+    """Start webui server in background"""
+    print_header("Starting WebUI Server")
+    
+
+    project_root = Path(__file__).parent.parent
+    
+    webui_app = project_root / "webui" / "app.py"
+    
+    if not webui_app.exists():
+        print_error(f"webui/app.py not found at {webui_app}")
+        return
+    
+    print_info(f"Starting server from: {webui_app}")
+    
+    try:
+
+        process = subprocess.Popen(
+            [sys.executable, str(webui_app)],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            cwd=str(project_root)
+        )
+        print_success(f"WebUI server started (PID: {process.pid})")
+        print_info(f"Access at: {API_BASE_URL}")
+        print_info("Press Ctrl+C in the new window to stop the server")
+    except Exception as e:
+        print_error(f"Failed to start server: {e}")
+
+
+@app.command()
 def status():
     """Check REAA system status"""
+    global API_KEY, api_client
     print_header("System Status")
-    
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        task = progress.add_task("Checking system status...", total=None)
-        
-        result = api_client.get("/api/system/status")
-        progress.remove_task(task)
-    
+
+    result = api_client.get("/api/system/status")
+
+    if "error" in result and result.get("error") == "Unauthorized":
+        show_auth_required_warning()
+        return
+
     if "error" not in result:
         print_table([result], "System Status")
         print_success("System is online")
@@ -366,38 +417,46 @@ def register(
     }
     
     result = api_client.post("/api/auth/register", data=data)
-    
+
     if "error" not in result:
         print_success("User registered successfully")
         print_json(result, "Registration Details")
     else:
-        print_error("Registration failed")
+        print_error(f"Registration failed: {result.get('error', 'Unknown error')}")
 
 
 @auth_app.command("login")
 def login(
     username: str = typer.Option(..., "--username", "-u", help="Username"),
-    password: str = typer.Option(..., "--password", "-p", help="Password")
+    password: str = typer.Option(..., "--password", "-p", help="Password"),
+    save: bool = typer.Option(False, "--save", "-s", help="Save API key securely to system keyring")
 ):
     """Login and get API token"""
     global API_KEY, api_client
     print_header("User Login")
-    
+
     data = {
         "username": username,
         "password": password
     }
-    
+
     result = api_client.post("/api/auth/login", data=data)
-    
+
     if "error" not in result and "token" in result:
         API_KEY = result["token"]
         api_client = APIClient(API_BASE_URL, API_KEY)
         print_success("Login successful")
-        console.print(f"[bold]Token:[/bold] {result['token'][:20]}...")
-        print_info("Use this token with --key option or set REAA_API_KEY environment variable")
+        console.print(f"[bold]Token:[/bold] {result['token']}")
+
+        if save:
+            if SecureStorage.save_api_key(API_KEY):
+                print_success("API key saved securely to system keyring")
+            else:
+                print_warning("Failed to save API key securely")
+
+        print_info("Use --save option to save token for future sessions")
     else:
-        print_error("Login failed")
+        print_error(f"Login failed: {result.get('error', 'Unknown error')}")
 
 
 @auth_app.command("logout")
@@ -660,21 +719,46 @@ def job_memory_search(
 @security_app.command("analyze")
 def security_analyze(
     job_id: str = typer.Argument(..., help="Job ID"),
-    message: str = typer.Option("Analyze for vulnerabilities", "--message", "-m", help="Analysis message")
+    message: str = typer.Option("Analyze for vulnerabilities", "--message", "-m", help="Analysis message"),
+    patterns: str = typer.Option("all", "--patterns", "-p", help="Vulnerability patterns (all, buffer-overflow, sql-injection, xss, cve, heuristic)"),
+    depth: str = typer.Option("standard", "--depth", "-d", help="Analysis depth (quick, standard, deep)")
 ):
-    """Analyze binary for security vulnerabilities"""
+    """Analyze binary for security vulnerabilities with pattern matching"""
     print_header(f"Security Analysis: {job_id}")
-    
+
     data = {
         "job_id": job_id,
-        "message": message
+        "message": message,
+        "patterns": patterns,
+        "depth": depth
     }
-    
+
     result = api_client.post("/security/analyze", data=data)
-    
+
     if "error" not in result:
-        print_success("Security analysis completed")
-        print_json(result, "Analysis Result")
+        print_success(f"Security analysis completed ({patterns} scan, {depth} depth)")
+
+      
+        if "vulnerabilities" in result and result["vulnerabilities"]:
+            print_table(result["vulnerabilities"], "Vulnerabilities Found")
+            print_warning(f"Found {len(result['vulnerabilities'])} vulnerabilities")
+        elif "vulnerabilities" in result:
+            print_success("No vulnerabilities found")
+
+        
+        if "pattern_matches" in result and result["pattern_matches"]:
+            print_table(result["pattern_matches"], "Pattern Matches")
+            print_info(f"Found {len(result['pattern_matches'])} pattern matches")
+
+       
+        if "risk_score" in result:
+            risk_level = "High" if result["risk_score"] >= 7 else "Medium" if result["risk_score"] >= 4 else "Low"
+            console.print(f"[bold]Risk Score:[/bold] {result['risk_score']}/10 ({risk_level})")
+
+        if "recommendations" in result and result["recommendations"]:
+            print_header("Recommendations")
+            for rec in result["recommendations"]:
+                console.print(f"• {rec}")
     else:
         print_error("Security analysis failed")
 
@@ -685,19 +769,85 @@ def security_report(
 ):
     """Get security report for job"""
     print_header(f"Security Report: {job_id}")
-    
+
     result = api_client.get(f"/security/report/{job_id}")
-    
+
     if "error" not in result:
         print_json(result, "Security Report")
     else:
         print_error("Failed to get security report")
 
 
+@security_app.command("audit")
+def security_audit(
+    job_id: str = typer.Argument(..., help="Job ID"),
+    checks: str = typer.Option("all", "--checks", "-c", help="Audit checks (all, memory, code, config, permissions, network)"),
+    severity: str = typer.Option("medium", "--severity", "-s", help="Minimum severity (low, medium, high, critical)")
+):
+    """Perform comprehensive security audit"""
+    print_header(f"Security Audit: {job_id}")
+
+    data = {
+        "job_id": job_id,
+        "checks": checks,
+        "severity": severity
+    }
+
+    result = api_client.post("/security/audit", data=data)
+
+    if "error" not in result:
+        print_success(f"Audit completed ({checks} checks, {severity}+ severity)")
+
+
+        if "findings" in result and result["findings"]:
+            print_table(result["findings"], "Audit Findings")
+            print_warning(f"Found {len(result['findings'])} findings")
+        else:
+            print_success("No security issues found")
+
+      
+        if "compliance_score" in result:
+            score = result["compliance_score"]
+            status = "Compliant" if score >= 80 else "Partial" if score >= 60 else "Non-compliant"
+            console.print(f"[bold]Compliance Score:[/bold] {score}% ({status})")
+
+  
+        if "summary" in result:
+            print_header("Audit Summary")
+            for key, value in result["summary"].items():
+                console.print(f"[bold]{key}:[/bold] {value}")
+    else:
+        print_error("Security audit failed")
+
+
+@security_app.command("metrics")
+def security_metrics(
+    job_id: str = typer.Argument(..., help="Job ID"),
+    detailed: bool = typer.Option(False, "--detailed", "-d", help="Show detailed metrics")
+):
+    """Get security metrics for job"""
+    print_header(f"Security Metrics: {job_id}")
+
+    result = api_client.get(f"/security/metrics/{job_id}")
+
+    if "error" not in result:
+        if detailed:
+            print_json(result, "Security Metrics")
+        else:
+        
+            print_header("Security Metrics Summary")
+            metrics_to_show = ["vulnerability_count", "risk_score", "compliance_score", "scan_coverage", "false_positive_rate"]
+            for metric in metrics_to_show:
+                if metric in result:
+                    console.print(f"[bold]{metric}:[/bold] {result[metric]}")
+    else:
+        print_error("Failed to get security metrics")
+
+
 @security_app.command("scan")
 def security_scan(
     job_id: str = typer.Argument(..., help="Job ID"),
-    scan_type: str = typer.Option("comprehensive", "--type", "-t", help="Scan type (memory, apis, input, privilege, comprehensive)")
+    scan_type: str = typer.Option("comprehensive", "--type", "-t", help="Scan type (memory, apis, input, privilege, comprehensive, strings, imports, entropy, anti-debug, packer)")
 ):
     """Scan binary for vulnerabilities"""
     print_header(f"Security Scan: {job_id}")
@@ -708,10 +858,43 @@ def security_scan(
     }
     
     result = api_client.post("/security/scan", data=data)
-    
+
     if "error" not in result:
         print_success(f"Scan completed ({scan_type})")
-        print_json(result, "Scan Result")
+
+      
+        if scan_type == "apis" and "dangerous_apis" in result:
+            if result["dangerous_apis"]:
+                print_table(result["dangerous_apis"], "Dangerous APIs Found")
+                print_warning(f"Found {len(result['dangerous_apis'])} dangerous API calls")
+            else:
+                print_success("No dangerous APIs found")
+        elif scan_type == "memory" and "memory_vulnerabilities" in result:
+            if result["memory_vulnerabilities"]:
+                print_table(result["memory_vulnerabilities"], "Memory Vulnerabilities")
+                print_warning(f"Found {len(result['memory_vulnerabilities'])} memory vulnerabilities")
+            else:
+                print_success("No memory vulnerabilities found")
+        elif scan_type == "strings" and "suspicious_strings" in result:
+            if result["suspicious_strings"]:
+                print_table(result["suspicious_strings"], "Suspicious Strings")
+                print_warning(f"Found {len(result['suspicious_strings'])} suspicious strings")
+            else:
+                print_success("No suspicious strings found")
+        elif scan_type == "imports" and "suspicious_imports" in result:
+            if result["suspicious_imports"]:
+                print_table(result["suspicious_imports"], "Suspicious Imports")
+                print_warning(f"Found {len(result['suspicious_imports'])} suspicious imports")
+            else:
+                print_success("No suspicious imports found")
+        else:
+            print_json(result, "Scan Result")
+
+   
+        if "summary" in result:
+            print_header("Scan Summary")
+            for key, value in result["summary"].items():
+                console.print(f"[bold]{key}:[/bold] {value}")
     else:
         print_error("Scan failed")
 
@@ -966,26 +1149,6 @@ def r2_status():
         print_error("Failed to get status")
 
 
-@radare2_app.command("analyze")
-def r2_analyze(
-    binary_path: str = typer.Argument(..., help="Path to binary")
-):
-    """Analyze binary with Radare2"""
-    print_header("Radare2 Analysis")
-    
-    data = {
-        "binary_path": binary_path
-    }
-    
-    result = api_client.post("/api/r2/analyze", data=data)
-    
-    if "error" not in result:
-        print_success("Analysis completed")
-        print_json(result, "Analysis Result")
-    else:
-        print_error("Analysis failed")
-
-
 @radare2_app.command("functions")
 def r2_functions():
     """List Radare2 functions"""
@@ -1004,11 +1167,14 @@ def r2_functions():
 def docker_status():
     """Get Docker container status"""
     print_header("Docker Status")
-    
+
     result = api_client.get("/api/docker/status")
-    
+
     if "error" not in result:
-        print_table(result.get("containers", []), "Containers")
+        containers = result.get("containers", [])
+        if containers:
+            print_table(containers, "Containers")
+            print_info("Use CONTAINER_ID with: reaa system logs <container_name>")
         console.print(f"[bold]Docker Version:[/bold] {result.get('docker_version', 'Unknown')}")
         console.print(f"[bold]Running Containers:[/bold] {result.get('running_containers', 0)}")
     else:
@@ -1035,14 +1201,28 @@ def docker_logs(
 ):
     """Get Docker container logs"""
     print_header(f"Docker Logs: {container_name}", emoji="📋")
-    
-    result = api_client.get(f"/api/docker/logs/{container_name}", params={"lines": lines})
-    
-    if "error" not in result:
-        console.print(Syntax(result.get("logs", ""), "log"))
-    else:
-        print_error("Failed to get logs")
 
+    try:
+        result = subprocess.run(
+            ['docker', 'logs', '--tail', str(lines), container_name],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+
+        logs = result.stdout if result.stdout else ""
+        if result.stderr:
+            logs += "\n" + result.stderr
+
+        if logs.strip():
+            console.print(Syntax(logs, "log"))
+        else:
+            print_info("No logs available")
+    except subprocess.TimeoutExpired:
+        print_error("Docker logs command timeout")
+    except Exception as e:
+        print_error(f"Failed to get logs: {e}")
 
 
 @app.command("settings")
@@ -1085,21 +1265,6 @@ def models(
             print_error("Failed to get current model")
     else:
         print_info("Actions: list, current, switch, test, config")
-
-
-@app.command("graph")
-def graph(
-    job_id: str = typer.Argument(..., help="Job ID")
-):
-    """Get graph visualization for job"""
-    print_header(f"Graph Visualization: {job_id}", emoji="📈")
-    
-    result = api_client.get(f"/api/graph/{job_id}")
-    
-    if "error" not in result:
-        print_json(result, "Graph Data")
-    else:
-        print_error("Failed to get graph")
 
 
 
@@ -1165,11 +1330,19 @@ def remote_room_users(
 def remote_api_keys():
     """List remote API keys"""
     print_header("Remote API Keys", emoji="🔑")
-    
+
     result = api_client.get("/api/remote/api-keys")
-    
+
     if "error" not in result:
-        print_table(result.get("api_keys", []), "API Keys")
+        api_keys = result.get("api_keys", [])
+       
+        if api_keys and isinstance(api_keys, list) and len(api_keys) > 0:
+            if isinstance(api_keys[0], dict):
+                print_table(api_keys, "API Keys")
+            else:
+                print_json(result, "API Keys")
+        else:
+            print_json(result, "API Keys")
     else:
         print_error("Failed to get API keys")
 

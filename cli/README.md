@@ -1,22 +1,61 @@
 # REAA CLI - Command Line Interface
 
-Beautiful CLI tool for interacting with REAA API endpoints using rich library.
 
-## 🚀 Features
+## ⚠️ Prerequisites
 
-- **Beautiful Terminal UI**: Powered by Rich library for stunning terminal output
-- **Complete API Coverage**: All API endpoints accessible via CLI
-- **Command Groups**: Organized commands for different functionalities
-- **Interactive Prompts**: User-friendly interactive prompts
-- **Progress Indicators**: Visual feedback for long-running operations
-- **Formatted Output**: Tables, JSON syntax highlighting, and panels
+**IMPORTANT:** You must activate the virtual environment before using the CLI:
+
+```bash
+# Windows (PowerShell)
+.venv\Scripts\activate
+
+# Linux/Mac
+source .venv/bin/activate
+```
+
+After activation, use the `reaa` command directly:
+
+```bash
+reaa --help
+```
+
+Or use the full path if you prefer:
+
+```bash
+.venv\Scripts\reaa.exe --help
+```
+
+### Authentication Required
+
+**Most commands require authentication.** You must login first:
+
+```bash
+# Register if you don't have an account
+reaa auth register --username <username> --email <email> --password <password>
+
+# Login with your credentials
+reaa auth login --username <username> --password <password>
+
+# Check if you're logged in
+reaa auth me
+
+# Logout when done
+reaa auth logout
+```
 
 ## 📦 Installation
 
 ```bash
+# Activate virtual environment first
 .venv\Scripts\activate
+
+# Navigate to CLI directory
 cd cli
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Install CLI in editable mode
 pip install -e .
 ```
 
@@ -48,13 +87,16 @@ reaa config --key your-api-key-here
 
 ## 📚 Usage
 
+**Before using any commands, make sure you've activated the virtual environment:**
+
+```bash
+.venv\Scripts\activate
+```
+
 ### Basic Commands
 
 ```bash
-# Run CLI with python (before installation)
-python reaa.py --help
-
-# After installation, use reaa directly
+# Show help
 reaa --help
 
 # Show version
@@ -100,6 +142,27 @@ reaa analysis delete <job-id>
 
 # Download job artifacts
 reaa analysis download <job-id> --output ./results
+
+# Memory layout
+reaa analysis memory <job-id>
+
+# Memory hex dump
+reaa analysis memory-hex <job-id> <section_name>
+
+# Memory analysis
+reaa analysis memory-analysis <job-id>
+
+# Memory strings
+reaa analysis memory-strings <job-id>
+
+# Memory cross-references
+reaa analysis memory-xref <job-id> <address>
+
+# Memory compare
+reaa analysis memory-compare <job-id> <section1> <section2>
+
+# Memory search
+reaa analysis memory-search <job-id> <pattern>
 ```
 
 ### Security Analysis
@@ -110,6 +173,12 @@ reaa security analyze <job-id> --message "Analyze for buffer overflows"
 
 # Get security report
 reaa security report <job-id>
+
+# Security audit
+reaa security audit <job-id>
+
+# Security metrics
+reaa security metrics <job-id>
 
 # Scan binary
 reaa security scan <job-id> --type comprehensive
@@ -156,8 +225,9 @@ reaa orchestrator execute <job-id> /path/to/binary.exe
 # List all tasks
 reaa orchestrator tasks
 
-# Approve operation
+# Approve or reject operation
 reaa orchestrator approve <job-id> --approve
+reaa orchestrator approve <job-id> --reject
 ```
 
 ### Radare2 Integration
@@ -166,11 +236,44 @@ reaa orchestrator approve <job-id> --approve
 # Get Radare2 status
 reaa r2 status
 
-# Analyze binary
-reaa r2 analyze /path/to/binary.exe
-
 # List functions
 reaa r2 functions
+```
+
+### Remote Collaboration
+
+```bash
+# Check remote collaboration health
+reaa remote health
+
+# Get remote server status
+reaa remote server-status
+
+# List remote jobs
+reaa remote jobs
+
+# Get users in remote room
+reaa remote room-users <job-id>
+
+# List remote API keys
+reaa remote api-keys
+
+# Create new API key
+reaa remote create-key
+
+# Delete API key
+reaa remote delete-key <api-key>
+```
+
+### Settings & Models
+
+```bash
+# View or update settings
+reaa settings --key <key> --value <value>
+
+# Manage AI models
+reaa models --action list      # List available models
+reaa models --action current   # Show current model
 ```
 
 ### System Monitoring
@@ -209,16 +312,25 @@ reaa analysis upload --help
 - `logout` - Logout current user
 - `me` - Get current user info
 
-### Analysis (5 commands)
+### Analysis (12 commands)
 - `upload` - Upload binary for analysis
 - `jobs` - List all analysis jobs
 - `status` - Get job status
 - `delete` - Delete a job
 - `download` - Download job artifacts
+- `memory` - Get memory layout
+- `memory-hex` - Get memory hex dump
+- `memory-analysis` - Analyze memory
+- `memory-strings` - Extract memory strings
+- `memory-xref` - Get memory cross-references
+- `memory-compare` - Compare memory regions
+- `memory-search` - Search memory
 
-### Security (3 commands)
+### Security (5 commands)
 - `analyze` - Analyze for vulnerabilities
 - `report` - Get security report
+- `audit` - Security audit
+- `metrics` - Security metrics
 - `scan` - Scan binary for vulnerabilities
 
 ### Active RE (4 commands)
@@ -238,15 +350,31 @@ reaa analysis upload --help
 - `tasks` - List all tasks
 - `approve` - Approve or reject operation
 
-### Radare2 (3 commands)
+### Radare2 (2 commands)
 - `status` - Get Radare2 status
-- `analyze` - Analyze binary
 - `functions` - List functions
 
 ### System (3 commands)
 - `docker` - Check Docker status
 - `gpu` - Check GPU status
 - `logs` - View container logs
+
+### Remote Collaboration (7 commands)
+- `health` - Check remote collaboration health
+- `server-status` - Get remote server status
+- `jobs` - List remote jobs
+- `room-users` - Get users in remote room
+- `api-keys` - List remote API keys
+- `create-key` - Create new API key
+- `delete-key` - Delete API key
+
+### Main Commands (6 commands)
+- `version` - Show CLI version
+- `run` - Start webui server in background
+- `status` - Check system status
+- `config` - Configure CLI settings
+- `settings` - Update or view settings
+- `models` - Manage AI models
 
 ## 📝 Environment Variables
 
