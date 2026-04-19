@@ -81,7 +81,6 @@ class FridaInstrumentation:
 
             pid = self.device.spawn(cmd)
             self.session = self.device.attach(pid)
-            self.session.on('message', self._on_message)
             self.device.resume(pid)
             log.info(f"Spawned and attached to process: {binary_path} (PID: {pid})")
             return True

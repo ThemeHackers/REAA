@@ -663,10 +663,16 @@ def api_list_jobs():
                 job_dir = os.path.join(data_dir, job_id)
                 if os.path.exists(job_dir):
                     filename = 'Unknown'
+                    binary_extensions = ('.exe', '.dll', '.sys', '.bin', '.elf', '.so', '.o', '.macho')
                     for file in os.listdir(job_dir):
-                        if file.endswith('.sys') or file.endswith('.exe') or file.endswith('.dll'):
+                        if file.endswith(binary_extensions):
                             filename = file
                             break
+                    if filename == 'Unknown':
+                        for file in os.listdir(job_dir):
+                            if os.path.isfile(os.path.join(job_dir, file)):
+                                filename = file
+                                break
                     local_jobs[job_id] = {
                         'filename': filename,
                         'status': 'completed',
