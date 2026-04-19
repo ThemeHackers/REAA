@@ -115,7 +115,14 @@ def resolve_job_to_binary_path(job_id):
                 break
 
         if not binary_file:
-            return {"error": f"No binary file found in job {job_id}", "found": False}
+            for file in os.listdir(job_path):
+                if os.path.isfile(os.path.join(job_path, file)):
+                    binary_file = os.path.join(job_path, file)
+                    filename = file
+                    break
+
+        if not binary_file:
+            return {"error": f"No file found in job {job_id}", "found": False}
 
         return {
             "binary_path": binary_file,
