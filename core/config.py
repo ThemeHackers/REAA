@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = ""
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""
+    GHIDRA_API_KEY: str = ""
+    CORE_API_KEYS: str = ""
 
     GHIDRA_HOME: str = "/opt/ghidra"
     GHIDRA_VERSION: str = "12.0.4"
@@ -53,7 +55,41 @@ class Settings(BaseSettings):
     LLM4DECOMPILE_REPETITION_PENALTY: float = 1.0
     LLM4DECOMPILE_TOP_P: float = 0.95
     LLM4DECOMPILE_TOP_K: int = 50
-    
+
+    ACTIVE_RE_ENABLED: bool = True
+    ACTIVE_RE_SANDBOX_IMAGE: str = "reaa/active-re-linux:latest"
+    ACTIVE_RE_WINDOWS_IMAGE: str = "reaa/active-re-windows:latest"
+    ACTIVE_RE_NETWORK_MODE: str = "bridge"
+    ACTIVE_RE_NETWORK_ISOLATED: bool = True
+    ACTIVE_RE_TIMEOUT: int = 300
+    ACTIVE_RE_MAX_MEMORY: str = "2GB"
+    ACTIVE_RE_MAX_CPU: float = 2.0
+
+    FRIDA_SCRIPTS_DIR: str = "/app/frida_scripts"
+    FRIDA_DEVICE_TIMEOUT: int = 60
+
+    ANGR_ENABLED: bool = True
+    ANGR_LLM_MODEL: str = "llama3.2:3b"
+    ANGR_LLM_API_BASE: str = "http://localhost:11434/v1"
+    ANGR_LLM_API_KEY: Optional[str] = None
+    ANGR_SYMBOLIC_EXECUTION_TIMEOUT: int = 300
+
+    PWNBG_ENABLED: bool = True
+    PWNBG_GDB_PATH: str = "/usr/bin/gdb"
+    PWNBG_HEAP_ANALYSIS_ENABLED: bool = True
+    PWNBG_MEMORY_VISUALIZATION_ENABLED: bool = True
+
+    VECTOR_DB_TYPE: str = "chromadb"
+    VECTOR_DB_PATH: str = "./data/vector_db"
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    RAG_TOP_K: int = 5
+    RAG_SIMILARITY_THRESHOLD: float = 0.7
+
+    ORCHESTRATOR_ENABLED: bool = True
+    HUMAN_APPROVAL_REQUIRED: bool = True
+    AGENT_MAX_TURNS: int = 10
+    AGENT_TIMEOUT: int = 120
+
     class Config:
         env_file = ".env"
         case_sensitive = True

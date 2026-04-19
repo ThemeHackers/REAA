@@ -636,10 +636,16 @@ function initTerminal(currentJobId) {
         const output = $('#r2-terminal-output');
         output.append(`<div class="text-yellow-400">Loading file for job ${jobId}...</div>`);
         
+        const token = localStorage.getItem('token');
+        const headers = {
+            'Authorization': `Bearer ${token}`
+        };
+        
         $.ajax({
             url: '/api/r2/load',
             method: 'POST',
             contentType: 'application/json',
+            headers: headers,
             data: JSON.stringify({ job_id: jobId }),
             success: function(data) {
                 if (data.success) {
@@ -667,10 +673,16 @@ function initTerminal(currentJobId) {
     function executeR2BackendCommand(command) {
         const output = $('#r2-terminal-output');
         
+        const token = localStorage.getItem('token');
+        const headers = {
+            'Authorization': `Bearer ${token}`
+        };
+        
         $.ajax({
             url: '/api/r2/command',
             method: 'POST',
             contentType: 'application/json',
+            headers: headers,
             data: JSON.stringify({ 
                 command: command,
                 job_id: r2CurrentJobId 
@@ -773,10 +785,16 @@ function initTerminal(currentJobId) {
         `);
         output.scrollTop(output[0].scrollHeight);
         
+        const token = localStorage.getItem('token');
+        const headers = {
+            'Authorization': `Bearer ${token}`
+        };
+        
         $.ajax({
             url: '/api/asm/analyze',
             method: 'POST',
             contentType: 'application/json',
+            headers: headers,
             data: JSON.stringify({
                 code: selection,
                 job_id: r2CurrentJobId
@@ -1056,10 +1074,16 @@ function initTerminal(currentJobId) {
             ${title} in progress...
         </div>`);
 
+        const token = localStorage.getItem('token');
+        const headers = {
+            'Authorization': `Bearer ${token}`
+        };
+        
         $.ajax({
             url: '/api/r2/command',
             method: 'POST',
             contentType: 'application/json',
+            headers: headers,
             data: JSON.stringify({
                 job_id: r2CurrentJobId,
                 command: 'pdf'
@@ -1073,6 +1097,7 @@ function initTerminal(currentJobId) {
                         url: '/api/asm/analyze',
                         method: 'POST',
                         contentType: 'application/json',
+                        headers: headers,
                         data: JSON.stringify({
                             code: context,
                             job_id: r2CurrentJobId,

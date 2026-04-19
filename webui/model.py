@@ -19,6 +19,15 @@ class ModelManager:
             os.makedirs(self.models_dir)
 
         self.current_config = self.load_model_config()
+
+       
+        from webui.active_re_agent import get_active_re_agent
+        from webui.orchestrator_agent import get_orchestrator_agent
+        from webui.report_agent import get_report_agent
+
+        self.active_re_agent = get_active_re_agent()
+        self.orchestrator_agent = get_orchestrator_agent()
+        self.report_agent = get_report_agent()
     
     def _get_config_file(self) -> str:
         return os.path.join(self.models_dir, "model_config.json")
@@ -163,8 +172,41 @@ class ModelManager:
             "current_model": self.get_current_model(),
             "api_base": self.current_config.get("api_base"),
             "connection_status": "connected" if connection_test["success"] else "disconnected",
-            "config_file_exists": os.path.exists(self._get_config_file())
+            "config_file_exists": os.path.exists(self._get_config_file()),
+            "agents": {
+                "active_re": "available",
+                "orchestrator": "available",
+                "report": "available"
+            }
         }
 
+    def get_active_re_agent(self):
+        """Get the Active RE agent instance"""
+        return self.active_re_agent
 
-model_manager = ModelManager()
+    def get_orchestrator_agent(self):
+        """Get the Orchestrator agent instance"""
+        return self.orchestrator_agent
+
+    def get_report_agent(self):
+        """Get the Report agent instance"""
+        return self.report_agent
+
+
+
+_model_manager_instance = None
+
+def get_model_manager():
+    """Get the singleton ModelManager instance"""
+    global _model_manager_instance
+    if _model_manager_instance is None:
+        _model_manager_instance = ModelManager()
+    return _model_manager_instance
+
+
+class _ModelManagerProxy:
+    """Proxy for lazy model manager initialization"""
+    def __getattr__(self, name):
+        return getattr(get_model_manager(), name)
+
+model_manager = _ModelManagerProxy()

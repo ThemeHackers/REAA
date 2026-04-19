@@ -3,7 +3,7 @@ import json
 import requests
 from typing import Dict, Any, Generator
 from openai import OpenAI
-from model import model_manager
+from webui.model import model_manager
 
 GHIDRA_API_BASE = "http://127.0.0.1:8000"
 

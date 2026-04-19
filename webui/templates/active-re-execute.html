@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Execute with Frida - Active Reverse Engineering</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <script src="{{ url_for('static', filename='css/libs/tailwind.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/libs/jquery.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/libs/atom-one-dark.min.css') }}">
+    <script src="{{ url_for('static', filename='js/libs/highlight.min.js') }}"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        .btn-action {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        }
+        .frida-message {
+            border-left: 3px solid #8b5cf6;
+            padding-left: 1rem;
+        }
+    </style>
+</head>
+<body class="text-gray-200">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Execute with Frida</h1>
+            <div class="flex gap-4">
+                <a href="/active-re/plan" class="text-indigo-400 hover:text-indigo-300 transition">← Plan Strategy</a>
+                <a href="/active-re" class="text-indigo-400 hover:text-indigo-300 transition">Back to Active RE</a>
+            </div>
+        </div>
+
+        <!-- Job Selection -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Select Job</h2>
+            <div class="flex gap-4">
+                <select id="job-select" class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                    <option value="">-- Select a job --</option>
+                </select>
+                <button id="load-job-btn" class="btn-action px-6 py-3 rounded-lg font-medium text-white">
+                    Load Job
+                </button>
+            </div>
+        </div>
+
+        <!-- Job Info -->
+        <div id="job-info" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Job Information</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-gray-400 text-sm">Job ID</p>
+                    <p id="job-id" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Filename</p>
+                    <p id="job-filename" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Status</p>
+                    <p id="job-status" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Binary Path</p>
+                    <p id="job-binary-path" class="text-white font-medium text-sm break-all">-</p>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Frida Script Configuration</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-300 mb-2">Script Template</label>
+                    <select id="script-template" class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                        <option value="api-tracing">API Call Tracing</option>
+                        <option value="function-hooking">Function Hooking</option>
+                        <option value="memory-monitoring">Memory Monitoring</option>
+                        <option value="custom">Custom Script</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-300 mb-2">Custom Script (JavaScript)</label>
+                    <textarea id="custom-script" rows="10" placeholder="// Enter custom Frida script here..." 
+                        class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 font-mono text-sm focus:outline-none focus:border-indigo-500"></textarea>
+                </div>
+                <div class="flex gap-4">
+                    <button id="load-template-btn" class="flex-1 bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-medium text-white transition">
+                        Load Template
+                    </button>
+                    <button id="ai-generate-script-btn" class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-6 py-3 rounded-lg font-medium text-white transition">
+                        🤖 AI Generate Script
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Execution Options -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Execution Options</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm text-gray-300 mb-2">Timeout (seconds)</label>
+                    <input type="number" id="timeout" value="60" min="10" max="300"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-300 mb-2">Command Arguments</label>
+                    <input type="text" id="command-args" placeholder="e.g., --input test.txt"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                </div>
+            </div>
+            <div class="mt-4">
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" id="auto-monitor" checked class="w-4 h-4 text-indigo-600 rounded">
+                    <span class="text-gray-300">Enable real-time monitoring during execution</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Execute Button -->
+        <div class="card rounded-xl p-6 mb-6">
+            <button id="execute-btn" class="w-full btn-action px-6 py-4 rounded-lg font-medium text-white text-lg">
+                Execute with Frida
+            </button>
+        </div>
+
+        <!-- Execution Results -->
+        <div id="execution-results" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Execution Results</h2>
+            <div id="results-content" class="space-y-4">
+                <!-- Results will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Frida Messages -->
+        <div id="frida-messages" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Frida Messages</h2>
+            <div id="messages-content" class="space-y-2 max-h-96 overflow-y-auto">
+                <!-- Frida messages will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Output Console -->
+        <div class="card rounded-xl p-6 mt-6">
+            <h3 class="text-lg font-semibold mb-4 text-indigo-300">Output Console</h3>
+            <div id="output-console" class="bg-gray-900 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm">
+                <p class="text-gray-500">Output will appear here...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 id="modal-title" class="text-xl font-semibold mb-4 text-white"></h3>
+            <div id="modal-content" class="mb-6"></div>
+            <div class="flex gap-4">
+                <button id="modal-cancel" class="flex-1 bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-medium text-white transition">
+                    Cancel
+                </button>
+                <button id="modal-confirm" class="flex-1 btn-action px-6 py-3 rounded-lg font-medium text-white">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let currentJobData = null;
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('token');
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = $(`<div class="fixed top-4 right-4 px-6 py-3 rounded-lg text-white ${type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-green-600' : 'bg-blue-600'}">${message}</div>`);
+            $('body').append(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function logOutput(message) {
+            const console = $('#output-console');
+            const time = new Date().toLocaleTimeString();
+            console.append(`<p class="text-gray-300">[${time}] ${message}</p>`);
+            console.scrollTop(console[0].scrollHeight);
+        }
+
+        function shortenPath(fullPath) {
+            if (!fullPath) return '-';
+            const prefix = 'C:\\Users\\1com310568\\Downloads\\';
+            if (fullPath.startsWith(prefix)) {
+                return fullPath.substring(prefix.length);
+            }
+            return fullPath;
+        }
+
+        function showModal(title, content, onConfirm) {
+            $('#modal-title').text(title);
+            $('#modal-content').html(content);
+            $('#modal').removeClass('hidden').addClass('flex');
+            
+            $('#modal-cancel').off('click').on('click', () => {
+                $('#modal').addClass('hidden').removeClass('flex');
+            });
+            
+            $('#modal-confirm').off('click').on('click', () => {
+                $('#modal').addClass('hidden').removeClass('flex');
+                if (onConfirm) onConfirm();
+            });
+        }
+
+        const FRIDA_TEMPLATES = {
+            'api-tracing': `// API Call Tracing Script
+Interceptor.attach(Module.findExportByName(null, 'open'), {
+    onEnter: function(args) {
+        console.log('[*] open called with:', args[0].readCString());
+    }
+});
+
+Interceptor.attach(Module.findExportByName(null, 'read'), {
+    onEnter: function(args) {
+        console.log('[*] read called with fd:', args[0].toInt32());
+    }
+});
+
+console.log('[+] API tracing script loaded');`,
+            
+            'function-hooking': `// Function Hooking Script
+// Hook specific functions
+const targetFunctions = ['malloc', 'free', 'memcpy'];
+
+targetFunctions.forEach(funcName => {
+    const ptr = Module.findExportByName(null, funcName);
+    if (ptr) {
+        Interceptor.attach(ptr, {
+            onEnter: function(args) {
+                console.log(\`[*] \${funcName} called\`);
+            },
+            onLeave: function(retval) {
+                console.log(\`[*] \${funcName} returned: \${retval}\`);
+            }
+        });
+    }
+});
+
+console.log('[+] Function hooking script loaded');`,
+            
+            'memory-monitoring': `// Memory Monitoring Script
+// Monitor memory allocations
+const mallocPtr = Module.findExportByName(null, 'malloc');
+Interceptor.attach(mallocPtr, {
+    onEnter: function(args) {
+        this.size = args[0].toInt32();
+    },
+    onLeave: function(retval) {
+        console.log('[*] malloc(' + this.size + ') = ' + retval);
+    }
+});
+
+// Monitor memory reads/writes
+Memory.scan(Process.findRangeByName('[heap]'), null, 1024, {
+    onMatch: function(address, size) {
+        console.log('[*] Memory match at:', address);
+    },
+    onComplete: function() {
+        console.log('[+] Memory scan complete');
+    }
+});
+
+console.log('[+] Memory monitoring script loaded');`
+        };
+
+        function loadJobs() {
+            $.ajax({
+                url: '/api/jobs',
+                headers: getAuthHeaders(),
+                success: function(data) {
+                    const jobs = Array.isArray(data) ? data : (data.jobs || []);
+                    const select = $('#job-select');
+                    select.empty();
+                    select.append('<option value="">-- Select a job --</option>');
+                    jobs.forEach(job => {
+                        select.append(`<option value="${job.id}">${job.filename || job.id}</option>`);
+                    });
+                },
+                error: function(err) {
+                    showToast('Failed to load jobs', 'error');
+                }
+            });
+        }
+
+        function autoLoadJob() {
+          
+            const urlParams = new URLSearchParams(window.location.search);
+            const jobIdFromUrl = urlParams.get('job_id');
+
+            if (jobIdFromUrl) {
+                loadJobById(jobIdFromUrl);
+                return;
+            }
+
+           
+            const savedJob = localStorage.getItem('active_re_selected_job');
+            if (savedJob) {
+                const jobData = JSON.parse(savedJob);
+                currentJobId = jobData.job_id;
+                currentJobData = jobData;
+                $('#job-info').removeClass('hidden');
+                $('#job-id').text(jobData.job_id);
+                $('#job-filename').text(jobData.filename || '-');
+                $('#job-status').text(jobData.status || '-');
+                $('#job-binary-path').text(shortenPath(jobData.binary_path));
+                logOutput(`Auto-loaded job from session: ${jobData.filename || jobData.job_id}`);
+                showToast('Job auto-loaded from previous session', 'success');
+
+              
+                $('#job-select').val(jobData.job_id);
+            }
+        }
+
+        function loadJobById(jobId) {
+            $.ajax({
+                url: `/api/active-re/jobs/${jobId}`,
+                headers: getAuthHeaders(),
+                success: function(data) {
+                    currentJobId = data.job_id;
+                    currentJobData = data;
+                    $('#job-info').removeClass('hidden');
+                    $('#job-id').text(data.job_id);
+                    $('#job-filename').text(data.filename || '-');
+                    $('#job-status').text(data.status || '-');
+                    $('#job-binary-path').text(shortenPath(data.binary_path));
+                    logOutput(`Loaded job: ${data.filename || data.job_id}`);
+                    showToast('Job loaded successfully', 'success');
+
+               
+                    $('#job-select').val(jobId);
+                },
+                error: function(err) {
+                    showToast('Failed to load job details', 'error');
+                }
+            });
+        }
+
+        $('#load-job-btn').on('click', function() {
+            const jobId = $('#job-select').val();
+            if (!jobId) {
+                showToast('Please select a job', 'warning');
+                return;
+            }
+            loadJobById(jobId);
+        });
+
+        $('#load-template-btn').on('click', function() {
+            const template = $('#script-template').val();
+            if (template === 'custom') {
+                $('#custom-script').val('');
+                return;
+            }
+            
+            if (FRIDA_TEMPLATES[template]) {
+                $('#custom-script').val(FRIDA_TEMPLATES[template]);
+                logOutput(`Loaded template: ${template}`);
+                showToast('Template loaded', 'success');
+            }
+        });
+
+        $('#ai-generate-script-btn').on('click', function() {
+            if (!currentJobId) {
+                showToast('Please load a job first', 'warning');
+                return;
+            }
+            
+            $('#ai-generate-script-btn').prop('disabled', true).text('Generating...');
+            logOutput('AI generating Frida script...');
+            
+            $.ajax({
+                url: '/api/active-re/ai-generate-frida-script',
+                method: 'POST',
+                headers: getAuthHeaders(),
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    job_id: currentJobId,
+                    binary_path: currentJobData.binary_path,
+                    analysis_goal: $('#analysis-goal').val() || 'General analysis'
+                }),
+                success: function(data) {
+                    if (data.script) {
+                        $('#custom-script').val(data.script);
+                        logOutput('AI generated Frida script');
+                        showToast('AI script generated', 'success');
+                    } else {
+                        showToast('Failed to generate script', 'warning');
+                    }
+                },
+                error: function(err) {
+                    showToast('Failed to generate AI script', 'error');
+                    logOutput('Error: ' + (err.responseJSON ? err.responseJSON.error : err.responseText));
+                },
+                complete: function() {
+                    $('#ai-generate-script-btn').prop('disabled', false).text('🤖 AI Generate Script');
+                }
+            });
+        });
+
+        $('#execute-btn').on('click', function() {
+            if (!currentJobId) {
+                showToast('Please load a job first', 'warning');
+                return;
+            }
+            
+            const scriptContent = $('#custom-script').val();
+            const timeout = $('#timeout').val();
+            const commandArgs = $('#command-args').val();
+            const autoMonitor = $('#auto-monitor').is(':checked');
+            
+            $('#execute-btn').prop('disabled', true).text('Executing...');
+            logOutput('Starting Frida execution...');
+            
+            const requestData = {
+                job_id: currentJobId,
+                binary_path: currentJobData.binary_path,
+                timeout: parseInt(timeout)
+            };
+            
+            if (scriptContent && $('#script-template').val() === 'custom') {
+                requestData.script_content = scriptContent;
+            }
+            
+            if (commandArgs) {
+                requestData.args = commandArgs.split(' ');
+            }
+            
+            $.ajax({
+                url: '/api/active-re/execute',
+                method: 'POST',
+                headers: getAuthHeaders(),
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function(data) {
+                    $('#execution-results').removeClass('hidden');
+                    
+                   
+                    let resultsHtml = '<div class="space-y-4">';
+                    
+                    if (data.execution_result) {
+                        const execResult = data.execution_result;
+                        
+                        if (execResult.exit_code !== undefined) {
+                            const exitColor = execResult.exit_code === 0 ? 'text-green-400' : 'text-red-400';
+                            resultsHtml += `<div><span class="text-gray-400">Exit Code:</span> <span class="${exitColor} font-semibold">${execResult.exit_code}</span></div>`;
+                        }
+                        
+                        if (execResult.stdout) {
+                            resultsHtml += `<div><span class="text-gray-400">Stdout:</span><pre class="bg-gray-900 p-3 rounded mt-2 text-sm overflow-x-auto">${execResult.stdout}</pre></div>`;
+                        }
+                        
+                        if (execResult.stderr) {
+                            resultsHtml += `<div><span class="text-gray-400">Stderr:</span><pre class="bg-gray-900 p-3 rounded mt-2 text-sm overflow-x-auto text-red-400">${execResult.stderr}</pre></div>`;
+                        }
+                    }
+                    
+                    resultsHtml += '</div>';
+                    $('#results-content').html(resultsHtml);
+                    
+      
+                    if (data.frida_messages && data.frida_messages.length > 0) {
+                        $('#frida-messages').removeClass('hidden');
+                        let messagesHtml = '';
+                        data.frida_messages.forEach(msg => {
+                            messagesHtml += `<div class="frida-message text-gray-300 text-sm">${JSON.stringify(msg)}</div>`;
+                        });
+                        $('#messages-content').html(messagesHtml);
+                    }
+                    
+                    logOutput('Execution completed');
+                    showToast('Execution completed', 'success');
+                },
+                error: function(err) {
+                    showToast('Failed to execute', 'error');
+                    logOutput('Error: ' + (err.responseJSON ? err.responseJSON.error : err.responseText));
+                },
+                complete: function() {
+                    $('#execute-btn').prop('disabled', false).text('Execute with Frida');
+                }
+            });
+        });
+
+        
+        loadJobs();
+
+       
+        setTimeout(autoLoadJob, 500);
+    </script>
+</body>
+</html>

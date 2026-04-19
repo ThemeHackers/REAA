@@ -1,8 +1,3 @@
-# REAA Docker Configuration
-# This docker-compose.yml contains only the Ghidra API infrastructure
-# AI models (Ollama and llm4decompile) run natively on Windows for GPU performance
-# See README.md for Windows native model setup instructions
-
 services:
   redis:
     image: redis:7-alpine
@@ -25,6 +20,7 @@ services:
       dockerfile: Dockerfile
       platforms:
         - linux/amd64
+    image: reaa-ghidra-api
     container_name: ghidra-api
     restart: unless-stopped
     ports:
@@ -41,6 +37,7 @@ services:
       - MAX_UPLOAD_SIZE=209715200
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CORE_API_KEYS=${CORE_API_KEYS}
     depends_on:
       redis:
         condition: service_healthy
@@ -57,6 +54,7 @@ services:
       dockerfile: Dockerfile
       platforms:
         - linux/amd64
+    image: reaa-celery-worker
     container_name: ghidra-celery-worker
     restart: unless-stopped
     command: celery -A core.celery_app worker --loglevel=info --concurrency=5
@@ -87,6 +85,7 @@ services:
       dockerfile: Dockerfile
       platforms:
         - linux/amd64
+    image: reaa-celery-beat
     container_name: ghidra-celery-beat
     restart: unless-stopped
     command: celery -A core.celery_app beat --loglevel=info

@@ -1,5 +1,7 @@
 # REAA - Reverse Engineering Analysis Assistant
 
+> **⚠️ Platform Support**: This project is designed primarily for **Windows** with **local deployment**. While Docker containers are used for some components, the main focus is on Windows-native execution and local AI model integration.
+
 AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced analysis tools for malware analysis and security research.
 
 ## 🚀 Features
@@ -29,6 +31,14 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 - **Analysis Properties**: Customizable analysis parameters
 - **Program Info Management**: Metadata and documentation
 
+### Active Reverse Engineering (NEW)
+- **Dynamic Execution**: Run binaries in isolated Docker sandbox
+- **Frida Instrumentation**: Runtime API call and memory monitoring
+- **angr Symbolic Execution**: Path exploration and constraint solving
+- **pwndbg Integration**: Enhanced debugging with heap analysis
+- **Multi-Agent System**: Orchestrated analysis with AI agents
+- **RAG System**: Context-aware retrieval from analysis history
+
 ## 🏗️ Architecture
 
 ```
@@ -51,22 +61,76 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 │  ┌─────────────┐      ┌─────────────┐      ┌──────────────┐ │
 │  │   WebUI     │─────▶│  FastAPI    │◀─────│  Celery     │ │
 │  │  (Flask)    │      │   (REST)    │      │  Worker      │ │
-│  └─────────────┘      └─────────────┘      └──────────────┘ │
-│       │                    │                     │          │
-│       │                    │                     ▼          │
-│       │                    │              ┌──────────────┐  │
-│       │                    │              │   Ghidra     │  │
-│       │                    │              │  12.0.4      │  │
-│       │                    │              └──────────────┘  │
-│       ▼                    ▼                     │          │
-│  ┌─────────────┐      ┌─────────────┐            │          │
-│  │   Redis     │      │  Radare2    │            │          │
-│  │  (Broker)   │      │  (CLI)      │            │          │
-│  └─────────────┘      └─────────────┘            │          │
+│  │             │      │             │      └──────────────┘ │
+│  │  + Agents   │      │             │                       │
+│  └─────────────┘      └─────────────┘                       │
+│       │                    │                                │
+│       │                    │                                │
+│       ▼                    ▼                                │
+│  ┌─────────────┐      ┌─────────────┐                       │
+│  │   Redis     │      │  Radare2    │                       │
+│  │  (Broker)   │      │  (CLI)      │                       │
+│  └─────────────┘      └─────────────┘                       │
+└─────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Active RE Docker Sandbox                  │
+│  ┌─────────────┐      ┌─────────────┐      ┌──────────────┐ │
+│  │   Frida     │      │    angr     │      │   pwndbg     │ │
+│  │ Instrument  │      │  Symbolic   │      │  Enhanced    │ │
+│  └─────────────┘      └─────────────┘      │  Debugging   │ │
+│                                            └──────────────┘ │
+│  ┌─────────────┐      ┌─────────────┐                       │
+│  │   Procmon   │      │  Wireshark  │                       │
+│  │  Monitor    │      │  Capture    │                       │
+│  └─────────────┘      └─────────────┘                       │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │              Vector Database (ChromaDB)               │  │
+│  │              RAG System + Knowledge Base              │  │ 
+│  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## 📦 Installation
+
+### Quick Installation (Windows)
+
+**Recommended for Windows users** - Run the automated setup script:
+
+```bash
+# Run the automated setup script
+python -m venv .venv
+.venv\Scripts\activate
+python setup.py
+```
+
+The setup script will automatically:
+- Check Python version and create virtual environment
+- Check Visual C++ Build Tools (required for some packages)
+- Install Python dependencies from requirements.txt
+- Install PyTorch with CUDA for GPU support
+- Check Docker installation
+- Configure .env file from .env.example
+- Build and start Docker containers
+- Install Ollama and pull llama3.2:3b model
+- Install Hugging Face CLI
+
+**If any step fails**, the script will continue and show troubleshooting steps at the end. You can then:
+- Fix the specific issue and run `python setup.py` again, or
+- Follow the manual installation steps below for that specific component
+
+**After setup completes:**
+1. Edit `.env` file with your settings (if not already done)
+2. Start Ollama server in a new terminal: `ollama serve`
+3. Run the application: `python webui\app.py`
+4. Access WebUI at: http://127.0.0.1:5000
+
+---
+
+### Manual Installation (Alternative)
+
+If you prefer manual installation or need to troubleshoot specific issues:
 
 ### Prerequisites
 - Docker and Docker Compose
@@ -87,6 +151,9 @@ AI-powered reverse engineering platform combining Ghidra, Radare2, and advanced 
 
 **Installation:**
 ```bash
+# Check Python version
+python --version # Should be 3.14.x or 3.14.3
+
 # Create virtual environment
 python -m venv .venv
 .venv\Scripts\activate
@@ -95,7 +162,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # For GPU support, install PyTorch with CUDA
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 # Verify GPU availability
 python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
@@ -181,8 +248,15 @@ Available models for decompilation refinement:
 - **Ollama**: llama3.2:3b or qwen3.5:4b
 - **LLM4Decompile**: llm4decompile-1.3b-v2 or llm4decompile-6.7b-v2
 
-### Quick Start
+### Quick Start (After Installation)
 
+**If you used `python setup.py`:**
+1. Edit `.env` file with your settings (if not already done)
+2. Start Ollama server in a new terminal: `ollama serve`
+3. Run the application: `python webui\app.py`
+4. Access WebUI at: http://127.0.0.1:5000
+
+**If you used manual installation:**
 1. **Clone repository**:
 ```bash
 git clone https://github.com/Themehackers/REAA
@@ -212,8 +286,7 @@ docker-compose up -d
 ```
 
 5. **Run app.py**
-
-```
+```bash
 python webui/app.py
 ```
 
@@ -255,6 +328,39 @@ LOG_LEVEL=INFO
 ADMIN_USERNAME='It's up to you'
 ADMIN_EMAIL='It's up to you'
 ADMIN_PASSWORD='It's up to you'
+
+ACTIVE_RE_ENABLED=true
+ACTIVE_RE_SANDBOX_IMAGE=reaa/active-re-linux:latest
+ACTIVE_RE_NETWORK_MODE=bridge
+ACTIVE_RE_NETWORK_ISOLATED=true
+ACTIVE_RE_TIMEOUT=300
+ACTIVE_RE_MAX_MEMORY=2GB
+ACTIVE_RE_MAX_CPU=2.0
+
+FRIDA_SCRIPTS_DIR=/app/frida_scripts
+FRIDA_DEVICE_TIMEOUT=60
+
+ANGR_ENABLED=true
+ANGR_LLM_MODEL=llama3.2:3b
+ANGR_LLM_API_BASE=http://localhost:11434/v1
+ANGR_LLM_API_KEY=
+ANGR_SYMBOLIC_EXECUTION_TIMEOUT=300
+
+PWNBG_ENABLED=true
+PWNBG_GDB_PATH=/usr/bin/gdb
+PWNBG_HEAP_ANALYSIS_ENABLED=true
+PWNBG_MEMORY_VISUALIZATION_ENABLED=true
+
+VECTOR_DB_TYPE=chromadb
+VECTOR_DB_PATH=./data/vector_db
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+RAG_TOP_K=5
+RAG_SIMILARITY_THRESHOLD=0.7
+
+ORCHESTRATOR_ENABLED=true
+HUMAN_APPROVAL_REQUIRED=true
+AGENT_MAX_TURNS=10
+AGENT_TIMEOUT=120
 ```
 
 ## 📊 Analysis Output
@@ -273,6 +379,115 @@ Each analysis generates comprehensive artifacts:
 - **control_flow.json**: Execution paths and basic blocks
 - **coverage.json**: Analysis coverage metrics
 - **timeline.json**: Analysis progress tracking
+
+## 💻 CLI Tool
+
+REAA includes a beautiful Command Line Interface (CLI) tool for interacting with all API endpoints directly from the terminal.
+
+For detailed CLI documentation, see [cli/README.md](cli/README.md)
+
+### Installation
+
+```bash
+# Activate virtual environment first
+.venv\Scripts\activate
+
+# Navigate to CLI directory
+cd cli
+
+# Install CLI in editable mode
+pip install -e .
+```
+
+### Configuration
+
+**Authentication Required:**
+
+Most CLI commands require authentication. You must login first:
+
+```bash
+# Register if you don't have an account
+reaa auth register --username <username> --email <email> --password <password>
+
+# Login with your credentials
+reaa auth login --username <username> --password <password>
+
+# Check if you're logged in
+reaa auth me
+
+# Logout when done
+reaa auth logout
+```
+
+**API Configuration:**
+
+```bash
+# Set API URL
+export REAA_API_URL="http://127.0.0.1:5000"
+
+# Or use command
+reaa config --url http://127.0.0.1:5000
+```
+
+### Usage Examples
+
+```bash
+# Check system status
+reaa status
+
+# Upload and analyze binary
+reaa analysis upload /path/to/binary.exe
+reaa analysis jobs
+reaa analysis status <job-id>
+
+# Security analysis
+reaa security analyze <job-id> --message "Analyze for vulnerabilities"
+reaa security report <job-id>
+
+# Active Reverse Engineering
+reaa active-re plan /path/to/binary.exe --goal "vulnerability detection"
+reaa active-re execute <job-id> /path/to/binary.exe
+reaa active-re monitor <job-id> --duration 30
+
+# RAG search
+reaa rag search "buffer overflow" --n 5
+reaa rag similar-functions "int main() { return 0; }" --n 5
+
+# Orchestrator
+reaa orchestrator plan /path/to/binary.exe --request "Comprehensive analysis"
+reaa orchestrator execute <job-id> /path/to/binary.exe
+reaa orchestrator tasks
+
+# System monitoring
+reaa system docker
+reaa system gpu
+reaa system logs ghidra-api --lines 100
+```
+
+### Command Groups
+
+- **auth**: Authentication (register, login, logout, me)
+- **analysis**: Binary analysis (upload, jobs, status, delete, download, memory, memory-hex, memory-analysis, memory-strings, memory-xref, memory-compare, memory-search)
+- **security**: Security analysis (analyze, report, audit, metrics, scan)
+- **active-re**: Active Reverse Engineering (plan, execute, monitor, chat)
+- **rag**: RAG (search, similar-functions, vulnerabilities)
+- **orchestrator**: Orchestrator (plan, execute, tasks, approve)
+- **r2**: Radare2 integration (status, functions)
+- **system**: System monitoring (docker, gpu, logs)
+- **remote**: Remote collaboration (health, server-status, jobs, room-users, api-keys, create-key, delete-key)
+- **models**: AI model management (list, current)
+- **settings**: Configuration settings
+
+### Features
+
+- Beautiful terminal UI powered by Rich library
+- Complete API coverage
+- Interactive prompts
+- Progress indicators
+- Formatted tables and JSON output
+- Auto-completion support
+
+For detailed documentation, see [cli/README.md](cli/README.md)
 
 ## 🌐 WebUI Features
 
@@ -304,6 +519,16 @@ Each analysis generates comprehensive artifacts:
 - **Selective Refine**: Choose specific files to refine
 - **LLM Integration**: Uses llm4decompile model
 
+### Active Reverse Engineering 
+- **Execution Planning**: Plan dynamic analysis strategies
+- **Sandbox Execution**: Run binaries in isolated Docker containers
+- **Frida Scripts**: Use pre-defined or custom Frida instrumentation
+- **Symbolic Execution**: Explore execution paths with angr
+- **Enhanced Debugging**: Use pwndbg for heap analysis
+- **Multi-Agent Coordination**: Orchestrated analysis with AI agents
+- **Report Generation**: Comprehensive security reports
+- **RAG Retrieval**: Search analysis history for context
+
 ### Export
 - **Export Results**: Download analysis artifacts
 - **Multiple Formats**: JSON, text, and structured exports
@@ -325,6 +550,9 @@ Each analysis generates comprehensive artifacts:
 - `DELETE /api/jobs/{job_id}` - Delete job
 - `GET /api/jobs/{job_id}/download` - Download job artifacts
 - `POST /api/jobs/cleanup` - Clean up old jobs
+- `GET /api/jobs/{job_id}/functions` - List job functions
+- `GET /api/jobs/{job_id}/strings` - List job strings
+- `GET /api/jobs/{job_id}/imports` - List job imports
 
 ### Chat & AI
 - `POST /chat` - Send chat message
@@ -341,12 +569,17 @@ Each analysis generates comprehensive artifacts:
 - `GET /results/{job_id}/function/{addr}/refine` - Refine single function
 - `POST /api/jobs/{job_id}/refine/batch` - Batch refine all functions
 - `GET /api/jobs/{job_id}/pseudocode/files` - List pseudocode files
+- `GET /api/jobs/{job_id}/pseudocode/<filename>` - Get pseudocode file content
 - `POST /api/jobs/{job_id}/refine/selective` - Selective refinement
 
 ### Results & Visualization
 - `GET /api/jobs/{job_id}/memory` - Get memory layout
-- `GET /api/jobs/{job_id}/callgraph` - Get call graph
-- `GET /api/jobs/{job_id}/controlflow/{function_address}` - Get control flow
+- `GET /api/jobs/{job_id}/memory/<section_name>/hex` - Get hex dump of memory section
+- `GET /api/jobs/{job_id}/memory/analysis` - Memory analysis
+- `GET /api/jobs/{job_id}/memory/strings` - Extract strings from memory
+- `GET /api/jobs/{job_id}/memory/<address>/xref` - Get cross-references for address
+- `GET /api/jobs/{job_id}/memory/compare/<section1>/<section2>` - Compare memory sections
+- `POST /api/jobs/{job_id}/memory/pattern/search` - Search for byte patterns
 
 ### Radare2 Integration
 - `GET /api/r2/status` - Radare2 status
@@ -365,6 +598,18 @@ Each analysis generates comprehensive artifacts:
 - `POST /api/r2/disasm/range` - Disassemble range
 - `POST /api/r2/disasm/graph` - Get disassembly graph
 - `POST /api/asm/analyze` - Analyze assembly
+- `POST /api/r2/test` - Test Radare2 connection
+
+### Additional Endpoints
+- `POST /api/settings` - Update settings
+- `GET /api/models` - List available models
+- `GET /api/models/current` - Get current model
+- `POST /api/models/switch` - Switch model
+- `POST /api/models/test` - Test model
+- `POST /api/models/config` - Configure model
+- `GET /api/graph/{job_id}` - Get graph visualization
+- `GET /api/jobs/{job_id}/diff/<filename>` - Get diff for pseudocode file
+- `GET /pseudocode` - Pseudocode page
 
 ### System & Monitoring
 - `GET /api/system/status` - System status
@@ -372,9 +617,33 @@ Each analysis generates comprehensive artifacts:
 - `GET /api/docker/logs/{container_name}` - Docker container logs
 - `GET /gpu/status` - GPU status
 - `GET /gpu/detailed` - Detailed GPU info
-- `GET /api/remote/health` - Remote collaboration health
 
-## ️ Troubleshooting
+### Remote Collaboration
+- `GET /api/remote/health` - Remote collaboration health
+- `GET /api/remote/server/status` - Remote server status
+- `GET /api/remote/jobs` - List remote jobs
+- `GET /api/remote/room/{job_id}/users` - Get users in remote room
+- `GET /api/remote/api-keys` - List API keys
+- `POST /api/remote/api-keys` - Create API key
+- `DELETE /api/remote/api-keys/<key>` - Delete API key
+
+### Active Reverse Engineering 
+- `POST /api/active-re/plan` - Plan Active RE execution strategy
+- `POST /api/active-re/execute` - Execute binary with Frida instrumentation
+- `POST /api/active-re/monitor` - Monitor binary execution
+- `POST /api/active-re/chat` - Chat with Active RE agent
+- `POST /api/orchestrator/plan` - Plan analysis strategy with orchestrator
+- `POST /api/orchestrator/execute` - Execute orchestrated analysis
+- `GET /api/orchestrator/approvals` - Get pending approval requests
+- `POST /api/orchestrator/approve` - Approve or reject operation
+- `GET /api/orchestrator/tasks` - Get all orchestrator tasks
+- `GET /api/orchestrator/tasks/{job_id}` - Get specific task status
+- `POST /api/report/generate` - Generate comprehensive security report
+- `POST /api/rag/search` - Search RAG knowledge base
+- `POST /api/rag/similar-functions` - Find similar functions
+- `POST /api/rag/vulnerabilities` - Search vulnerability patterns
+
+## 🛠️ Troubleshooting
 
 ### AI Model Issues
 
@@ -423,7 +692,124 @@ docker-compose logs celery-worker
 docker-compose restart celery-worker
 ```
 
-## 📚 Additional Resources
+## 🚀 Active Reverse Engineering Usage
+
+### Starting Active RE Analysis
+
+1. **Build the Active RE Docker image**:
+```bash
+cd docker/active-re
+docker-compose build
+```
+
+2. **Start the Active RE sandbox**:
+```bash
+docker-compose up -d
+```
+
+3. **Plan an execution strategy**:
+```bash
+curl -X POST http://127.0.0.1:5000/api/active-re/plan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "binary_path": "/path/to/binary.exe",
+    "analysis_goal": "vulnerability detection",
+    "binary_type": "exe"
+  }'
+```
+
+4. **Execute with Frida instrumentation**:
+```bash
+curl -X POST http://127.0.0.1:5000/api/active-re/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "binary_path": "/path/to/binary.exe"
+  }'
+```
+
+5. **Monitor execution**:
+```bash
+curl -X POST http://127.0.0.1:5000/api/active-re/monitor \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "duration": 30
+  }'
+```
+
+### Using the Orchestrator
+
+The orchestrator agent coordinates multiple analysis tools:
+
+```bash
+# Plan analysis strategy
+curl -X POST http://127.0.0.1:5000/api/orchestrator/plan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "binary_path": "/path/to/binary.exe",
+    "user_request": "Perform comprehensive security analysis",
+    "binary_type": "exe"
+  }'
+
+# Execute orchestrated analysis
+curl -X POST http://127.0.0.1:5000/api/orchestrator/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "binary_path": "/path/to/binary.exe",
+    "strategy": {...}
+  }'
+
+# Check for pending approvals
+curl http://127.0.0.1:5000/api/orchestrator/approvals
+
+# Approve or reject operation
+curl -X POST http://127.0.0.1:5000/api/orchestrator/approve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "approved": true
+  }'
+```
+
+### RAG System Usage
+
+Search the knowledge base for similar functions and vulnerabilities:
+
+```bash
+# Search for similar functions
+curl -X POST http://127.0.0.1:5000/api/rag/similar-functions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_code": "int main() { return 0; }",
+    "n_results": 5
+  }'
+
+# Search for vulnerability patterns
+curl -X POST http://127.0.0.1:5000/api/rag/vulnerabilities \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code_snippet": "strcpy(buffer, input)",
+    "n_results": 5
+  }'
+```
+
+### Report Generation
+
+Generate comprehensive security reports:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/report/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_id": "your-job-id",
+    "analysis_results": {...},
+    "output_format": "html"
+  }'
+```
+
+## Additional Resources
 
 - [Ghidra Documentation](https://ghidra-sre.org/)
 - [PyGhidra Documentation](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)

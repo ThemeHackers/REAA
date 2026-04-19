@@ -10,7 +10,7 @@ class User(db.Model):
     
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=True, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
@@ -118,7 +118,7 @@ class CollaborationSession(db.Model):
     socket_id = db.Column(db.String(100))
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_active = db.Column(db.DateTime, default=datetime.utcnow)
-    cursor_position = db.Column(db.JSON)  # Store cursor position for real-time collaboration
+    cursor_position = db.Column(db.JSON) 
     
     def to_dict(self):
         return {

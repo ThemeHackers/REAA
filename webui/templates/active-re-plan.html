@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plan Strategy - Active Reverse Engineering</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <script src="{{ url_for('static', filename='css/libs/tailwind.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/libs/jquery.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/libs/atom-one-dark.min.css') }}">
+    <script src="{{ url_for('static', filename='js/libs/highlight.min.js') }}"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        .btn-action {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        }
+        .step-item {
+            border-left: 3px solid #6366f1;
+            padding-left: 1rem;
+        }
+    </style>
+</head>
+<body class="text-gray-200">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Plan Strategy</h1>
+            <div class="flex gap-4">
+                <a href="/active-re" class="text-indigo-400 hover:text-indigo-300 transition">← Back to Active RE</a>
+            </div>
+        </div>
+
+        <!-- Job Selection -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Select Job</h2>
+            <div class="flex gap-4">
+                <select id="job-select" class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500">
+                    <option value="">-- Select a job --</option>
+                </select>
+                <button id="load-job-btn" class="btn-action px-6 py-3 rounded-lg font-medium text-white">
+                    Load Job
+                </button>
+            </div>
+        </div>
+
+        <!-- Job Info -->
+        <div id="job-info" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Job Information</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-gray-400 text-sm">Job ID</p>
+                    <p id="job-id" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Filename</p>
+                    <p id="job-filename" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Status</p>
+                    <p id="job-status" class="text-white font-medium">-</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Binary Path</p>
+                    <p id="job-binary-path" class="text-white font-medium text-sm break-all">-</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis Goal Input -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Analysis Goal</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-300 mb-2">Goal Description</label>
+                    <textarea id="analysis-goal" rows="3" placeholder="e.g., Find buffer overflow vulnerabilities in this binary" 
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-indigo-500"></textarea>
+                </div>
+                <div class="flex gap-4">
+                    <button id="ai-suggest-btn" class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-6 py-3 rounded-lg font-medium text-white transition">
+                        🤖 AI Suggest Goals
+                    </button>
+                    <button id="generate-plan-btn" class="flex-1 btn-action px-6 py-3 rounded-lg font-medium text-white">
+                        Generate Plan
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generated Plan -->
+        <div id="plan-result" class="card rounded-xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Generated Execution Plan</h2>
+            <div id="plan-content" class="space-y-4">
+                <!-- Plan content will be inserted here -->
+            </div>
+            <div class="mt-6 flex gap-4">
+                <button id="execute-plan-btn" class="flex-1 btn-action px-6 py-3 rounded-lg font-medium text-white">
+                    Execute This Plan
+                </button>
+                <button id="save-plan-btn" class="flex-1 bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-medium text-white transition">
+                    Save Plan
+                </button>
+            </div>
+        </div>
+
+        <!-- Plan History -->
+        <div class="card rounded-xl p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-indigo-300">Plan History</h2>
+            <div id="plan-history" class="space-y-3">
+                <p class="text-gray-500 text-sm">No saved plans yet...</p>
+            </div>
+        </div>
+
+        <!-- Output Console -->
+        <div class="card rounded-xl p-6 mt-6">
+            <h3 class="text-lg font-semibold mb-4 text-indigo-300">Output Console</h3>
+            <div id="output-console" class="bg-gray-900 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm">
+                <p class="text-gray-500">Output will appear here...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 id="modal-title" class="text-xl font-semibold mb-4 text-white"></h3>
+            <div id="modal-content" class="mb-6"></div>
+            <div class="flex gap-4">
+                <button id="modal-cancel" class="flex-1 bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-medium text-white transition">
+                    Cancel
+                </button>
+                <button id="modal-confirm" class="flex-1 btn-action px-6 py-3 rounded-lg font-medium text-white">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let currentJobData = null;
+        let currentPlan = null;
+        let planHistory = [];
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('token');
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = $(`<div class="fixed top-4 right-4 px-6 py-3 rounded-lg text-white ${type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-green-600' : 'bg-blue-600'}">${message}</div>`);
+            $('body').append(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function logOutput(message) {
+            const console = $('#output-console');
+            const time = new Date().toLocaleTimeString();
+            console.append(`<p class="text-gray-300">[${time}] ${message}</p>`);
+            console.scrollTop(console[0].scrollHeight);
+        }
+
+        function shortenPath(fullPath) {
+            if (!fullPath) return '-';
+            const prefix = 'C:\\Users\\1com310568\\Downloads\\';
+            if (fullPath.startsWith(prefix)) {
+                return fullPath.substring(prefix.length);
+            }
+            return fullPath;
+        }
+
+        function showModal(title, content, onConfirm) {
+            $('#modal-title').text(title);
+            $('#modal-content').html(content);
+            $('#modal').removeClass('hidden').addClass('flex');
+            
+            $('#modal-cancel').off('click').on('click', () => {
+                $('#modal').addClass('hidden').removeClass('flex');
+            });
+            
+            $('#modal-confirm').off('click').on('click', () => {
+                $('#modal').addClass('hidden').removeClass('flex');
+                if (onConfirm) onConfirm();
+            });
+        }
+
+        function loadJobs() {
+            $.ajax({
+                url: '/api/jobs',
+                headers: getAuthHeaders(),
+                success: function(data) {
+                    const jobs = Array.isArray(data) ? data : (data.jobs || []);
+                    const select = $('#job-select');
+                    select.empty();
+                    select.append('<option value="">-- Select a job --</option>');
+                    jobs.forEach(job => {
+                        select.append(`<option value="${job.id}">${job.filename || job.id}</option>`);
+                    });
+                },
+                error: function(err) {
+                    showToast('Failed to load jobs', 'error');
+                }
+            });
+        }
+
+        function autoLoadJob() {
+           
+            const urlParams = new URLSearchParams(window.location.search);
+            const jobIdFromUrl = urlParams.get('job_id');
+
+            if (jobIdFromUrl) {
+                loadJobById(jobIdFromUrl);
+                return;
+            }
+
+          
+            const savedJob = localStorage.getItem('active_re_selected_job');
+            if (savedJob) {
+                const jobData = JSON.parse(savedJob);
+                currentJobId = jobData.job_id;
+                currentJobData = jobData;
+                $('#job-info').removeClass('hidden');
+                $('#job-id').text(jobData.job_id);
+                $('#job-filename').text(jobData.filename || '-');
+                $('#job-status').text(jobData.status || '-');
+                $('#job-binary-path').text(shortenPath(jobData.binary_path));
+                logOutput(`Auto-loaded job from session: ${jobData.filename || jobData.job_id}`);
+                showToast('Job auto-loaded from previous session', 'success');
+
+               
+                $('#job-select').val(jobData.job_id);
+            }
+        }
+
+        function loadJobById(jobId) {
+            $.ajax({
+                url: `/api/active-re/jobs/${jobId}`,
+                headers: getAuthHeaders(),
+                success: function(data) {
+                    currentJobId = data.job_id;
+                    currentJobData = data;
+                    $('#job-info').removeClass('hidden');
+                    $('#job-id').text(data.job_id);
+                    $('#job-filename').text(data.filename || '-');
+                    $('#job-status').text(data.status || '-');
+                    $('#job-binary-path').text(shortenPath(data.binary_path));
+                    logOutput(`Loaded job: ${data.filename || data.job_id}`);
+                    showToast('Job loaded successfully', 'success');
+
+                 
+                    $('#job-select').val(jobId);
+                },
+                error: function(err) {
+                    showToast('Failed to load job details', 'error');
+                }
+            });
+        }
+
+        $('#load-job-btn').on('click', function() {
+            const jobId = $('#job-select').val();
+            if (!jobId) {
+                showToast('Please select a job', 'warning');
+                return;
+            }
+            loadJobById(jobId);
+        });
+
+        $('#ai-suggest-btn').on('click', function() {
+            if (!currentJobId) {
+                showToast('Please load a job first', 'warning');
+                return;
+            }
+            
+            $('#ai-suggest-btn').prop('disabled', true).text('Analyzing...');
+            logOutput('AI analyzing binary for goal suggestions...');
+            
+            $.ajax({
+                url: '/api/active-re/ai-suggest-goals',
+                method: 'POST',
+                headers: getAuthHeaders(),
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    job_id: currentJobId,
+                    binary_path: currentJobData.binary_path
+                }),
+                success: function(data) {
+                    if (data.suggestions && data.suggestions.length > 0) {
+                        const suggestions = data.suggestions.join('\n');
+                        $('#analysis-goal').val(suggestions);
+                        logOutput('AI suggested goals loaded');
+                        showToast('AI suggestions loaded', 'success');
+                    } else {
+                        showToast('No suggestions available', 'warning');
+                    }
+                },
+                error: function(err) {
+                    showToast('Failed to get AI suggestions', 'error');
+                    logOutput('Error: ' + (err.responseJSON ? err.responseJSON.error : err.responseText));
+                },
+                complete: function() {
+                    $('#ai-suggest-btn').prop('disabled', false).text('🤖 AI Suggest Goals');
+                }
+            });
+        });
+
+        $('#generate-plan-btn').on('click', function() {
+            if (!currentJobId) {
+                showToast('Please load a job first', 'warning');
+                return;
+            }
+            
+            const goal = $('#analysis-goal').val().trim();
+            if (!goal) {
+                showToast('Please enter analysis goal', 'warning');
+                return;
+            }
+            
+            $('#generate-plan-btn').prop('disabled', true).text('Generating...');
+            logOutput(`Generating plan for goal: ${goal}`);
+            
+            $.ajax({
+                url: '/api/active-re/plan',
+                method: 'POST',
+                headers: getAuthHeaders(),
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    binary_path: currentJobData.binary_path,
+                    analysis_goal: goal,
+                    binary_type: 'exe'
+                }),
+                success: function(data) {
+                    currentPlan = data;
+                    $('#plan-result').removeClass('hidden');
+                    
+                    let planHtml = '<div class="space-y-4">';
+                    
+                    if (data.goal) {
+                        planHtml += `<div><span class="text-gray-400">Goal:</span> <span class="text-white">${data.goal}</span></div>`;
+                    }
+                    
+                    if (data.tools_to_use && data.tools_to_use.length > 0) {
+                        planHtml += `<div><span class="text-gray-400">Tools:</span> <div class="flex gap-2 mt-2 flex-wrap">`;
+                        data.tools_to_use.forEach(tool => {
+                            planHtml += `<span class="bg-indigo-600 px-3 py-1 rounded-full text-sm">${tool}</span>`;
+                        });
+                        planHtml += `</div></div>`;
+                    }
+                    
+                    if (data.steps && data.steps.length > 0) {
+                        planHtml += '<div><span class="text-gray-400">Steps:</span><div class="mt-2 space-y-2">';
+                        data.steps.forEach((step, index) => {
+                            planHtml += `<div class="step-item text-gray-200">${index + 1}. ${step}</div>`;
+                        });
+                        planHtml += '</div></div>';
+                    }
+                    
+                    if (data.estimated_risk) {
+                        const riskColor = data.estimated_risk === 'low' ? 'text-green-400' : 
+                                        data.estimated_risk === 'medium' ? 'text-yellow-400' : 'text-red-400';
+                        planHtml += `<div><span class="text-gray-400">Estimated Risk:</span> <span class="${riskColor} font-semibold">${data.estimated_risk}</span></div>`;
+                    }
+                    
+                    if (data.requires_approval) {
+                        planHtml += `<div class="bg-yellow-900/30 border border-yellow-600 rounded-lg p-3"><span class="text-yellow-400">⚠️ This plan requires human approval due to risk level</span></div>`;
+                    }
+                    
+                    planHtml += '</div>';
+                    $('#plan-content').html(planHtml);
+                    
+                    logOutput('Plan generated successfully');
+                    showToast('Plan generated successfully', 'success');
+                },
+                error: function(err) {
+                    showToast('Failed to generate plan', 'error');
+                    logOutput('Error: ' + (err.responseJSON ? err.responseJSON.error : err.responseText));
+                },
+                complete: function() {
+                    $('#generate-plan-btn').prop('disabled', false).text('Generate Plan');
+                }
+            });
+        });
+
+        $('#save-plan-btn').on('click', function() {
+            if (!currentPlan) {
+                showToast('No plan to save', 'warning');
+                return;
+            }
+            
+            const planEntry = {
+                timestamp: new Date().toISOString(),
+                job_id: currentJobId,
+                goal: currentPlan.goal,
+                plan: currentPlan
+            };
+            
+            planHistory.unshift(planEntry);
+            updatePlanHistoryDisplay();
+            showToast('Plan saved to history', 'success');
+            logOutput('Plan saved');
+        });
+
+        function updatePlanHistoryDisplay() {
+            const historyContainer = $('#plan-history');
+            if (planHistory.length === 0) {
+                historyContainer.html('<p class="text-gray-500 text-sm">No saved plans yet...</p>');
+                return;
+            }
+            
+            let historyHtml = '';
+            planHistory.forEach((entry, index) => {
+                const time = new Date(entry.timestamp).toLocaleString();
+                historyHtml += `
+                    <div class="bg-gray-800 rounded-lg p-4 cursor-pointer hover:bg-gray-700 transition" onclick="loadPlanFromHistory(${index})">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-white font-medium">${entry.goal}</p>
+                                <p class="text-gray-400 text-sm">${entry.job_id}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-gray-500 text-sm">${time}</p>
+                                <span class="text-indigo-400 text-sm">${entry.plan.estimated_risk}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            historyContainer.html(historyHtml);
+        }
+
+        function loadPlanFromHistory(index) {
+            const entry = planHistory[index];
+            currentPlan = entry.plan;
+            $('#analysis-goal').val(entry.goal);
+            $('#plan-result').removeClass('hidden');
+          
+            let planHtml = '<div class="space-y-4">';
+            if (entry.plan.steps && entry.plan.tools_to_use) {
+                planHtml += `<div><span class="text-gray-400">Goal:</span> <span class="text-white">${entry.plan.goal}</span></div>`;
+                planHtml += `<div><span class="text-gray-400">Tools:</span> <span class="text-indigo-400">${entry.plan.tools_to_use.join(', ')}</span></div>`;
+                planHtml += '<div><span class="text-gray-400">Steps:</span><ol class="list-decimal list-inside mt-1 space-y-1">';
+                entry.plan.steps.forEach(step => {
+                    planHtml += `<li class="text-gray-200">${step}</li>`;
+                });
+                planHtml += '</ol></div>';
+            }
+            planHtml += '</div>';
+            $('#plan-content').html(planHtml);
+            
+            logOutput(`Loaded plan from history: ${entry.goal}`);
+            showToast('Plan loaded from history', 'success');
+        }
+
+        $('#execute-plan-btn').on('click', function() {
+            if (!currentPlan) {
+                showToast('No plan to execute', 'warning');
+                return;
+            }
+            
+          
+            window.location.href = `/active-re/execute?job_id=${currentJobId}&plan=${encodeURIComponent(JSON.stringify(currentPlan))}`;
+        });
+
+
+        loadJobs();
+
+     
+        setTimeout(autoLoadJob, 500);
+    </script>
+</body>
+</html>

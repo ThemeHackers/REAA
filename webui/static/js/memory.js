@@ -80,28 +80,59 @@ $(document).ready(function() {
             });
     }
     
+    function authenticatedGet(url, successCallback, errorCallback) {
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        return $.ajax({
+            url: url,
+            headers: headers,
+            method: 'GET',
+            success: successCallback,
+            error: function(xhr) {
+                if (xhr.status === 401) {
+                    console.error('[Memory] Authentication failed (401). Please login again.');
+                }
+                if (errorCallback) errorCallback(xhr);
+            }
+        });
+    }
+
     function fetchWithRetry(url, maxRetries = 3, initialDelay = 1000) {
         return new Promise((resolve, reject) => {
             let retries = 0;
             let delay = initialDelay;
-            
+
             function attemptFetch() {
-                $.get(url)
+                const token = localStorage.getItem('token');
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+                $.ajax({
+                    url: url,
+                    headers: headers,
+                    method: 'GET'
+                })
                     .done(function(data) {
                         resolve(data);
                     })
                     .fail(function(xhr) {
+                        if (xhr.status === 401) {
+                            console.error('[Memory] Authentication failed (401). Please login again.');
+                            reject(xhr);
+                            return;
+                        }
+
                         retries++;
                         if (retries < maxRetries) {
                             console.log(`[Memory] Retry ${retries}/${maxRetries} in ${delay}ms`);
                             setTimeout(attemptFetch, delay);
-                            delay *= 2; 
+                            delay *= 2;
                         } else {
                             reject(xhr);
                         }
                     });
             }
-            
+
             attemptFetch();
         });
     }
@@ -220,9 +251,9 @@ $(document).ready(function() {
             return;
         }
         
-        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
+        authenticatedGet(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
             const bytes = hexData.bytes || [];
-            
+
             hexViewerState.searchCallback = function(results, duration) {
                 console.log(`[Memory] Hex search completed in ${duration.toFixed(2)}ms, found ${results.length} matches`);
                 
@@ -251,7 +282,7 @@ $(document).ready(function() {
     function performHexSearchMainThread(pattern, searchType) {
         console.log('[Memory] Using main thread for hex search (fallback)');
         
-        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
+        authenticatedGet(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
             const bytes = hexData.bytes || [];
             const results = [];
             const startTime = performance.now();
@@ -622,7 +653,7 @@ $(document).ready(function() {
         hexContent.html('<div class="text-gray-400 text-center py-4"><div class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div><p>Loading hex dump...</p></div>');
         
         
-        $.get(`/api/jobs/${currentJobId}/memory/${sectionName}/hex`, function(hexData) {
+        authenticatedGet(`/api/jobs/${currentJobId}/memory/${sectionName}/hex`, function(hexData) {
             console.log('[Memory] Hex data received:', hexData);
             
             if (hexData && hexData.bytes && hexData.bytes.length > 0) {
@@ -766,10 +797,10 @@ $(document).ready(function() {
         const endOffset = endLine * bytesPerLine;
         
        
-        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
+        authenticatedGet(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
             const bytes = hexData.bytes || [];
             const displayBytes = bytes.slice(startOffset, endOffset);
-            
+
             let html = '';
             for (let i = 0; i < displayBytes.length; i += bytesPerLine) {
                 const lineBytes = displayBytes.slice(i, i + bytesPerLine);
@@ -800,7 +831,7 @@ $(document).ready(function() {
         
         showToast('Exporting hex data...', 'info');
         
-        $.get(`/api/jobs/${currentJobId}/memory/${sectionName}/hex`, function(hexData) {
+        authenticatedGet(`/api/jobs/${currentJobId}/memory/${sectionName}/hex`, function(hexData) {
             if (hexData && hexData.bytes && hexData.bytes.length > 0) {
                 const exportData = {
                     section: section.name,
@@ -1255,10 +1286,10 @@ $(document).ready(function() {
             return;
         }
         
-        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
+        authenticatedGet(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
             const results = [];
             const bytes = hexData.bytes || [];
-            
+
             if (searchType === 'hex') {
                 const patternBytes = pattern.split(/\s+/).map(b => {
                     const parsed = parseInt(b, 16);
@@ -1386,7 +1417,7 @@ $(document).ready(function() {
         
         const snapshotName = prompt('Enter snapshot name:') || `Snapshot ${memorySnapshots.length + 1}`;
         
-        $.get(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
+        authenticatedGet(`/api/jobs/${currentJobId}/memory/${hexViewerState.currentSection}/hex`, function(hexData) {
             const snapshot = {
                 id: 'snapshot_' + Date.now(),
                 name: snapshotName,

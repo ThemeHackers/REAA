@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Job Queue Worker for AI Reverse Engineering System
-Processes analysis jobs using RQ (Redis Queue)
-"""
 
 import os
 import sys
@@ -10,6 +6,10 @@ import datetime
 import redis
 from rq import Worker, Queue, Connection
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.panel import Panel
+
+console = Console()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -21,7 +21,6 @@ redis_conn = redis.from_url(redis_url)
 queues = ['high', 'default', 'low']
 
 def analyze_binary_task(job_id):
-    """Task to analyze a binary file"""
     from app import app
     from models import db, Job
     from ghidra_assistant import GhidraAssistant
@@ -58,7 +57,6 @@ def analyze_binary_task(job_id):
             raise e
 
 def security_analysis_task(job_id, analysis_type='comprehensive'):
-    """Task to perform security analysis"""
     from app import app
     from models import db, Job
     from security_agent import SecurityAgent
@@ -98,7 +96,6 @@ def security_analysis_task(job_id, analysis_type='comprehensive'):
             raise e
 
 def graph_generation_task(job_id):
-    """Task to generate call graphs"""
     from app import app
     from models import db, Job
     
@@ -132,8 +129,11 @@ def graph_generation_task(job_id):
             raise e
 
 if __name__ == '__main__':
-    print(f"Starting worker on {redis_url}")
-    print(f"Listening to queues: {', '.join(queues)}")
+    console.print(Panel(
+        f"[bold cyan]Starting worker[/bold cyan]\n[blue]Redis URL:[/blue] {redis_url}\n[green]Queues:[/green] {', '.join(queues)}",
+        title="[bold]REAA Worker[/bold]",
+        border_style="cyan"
+    ))
     
     with Connection(redis_conn):
         worker = Worker(queues)

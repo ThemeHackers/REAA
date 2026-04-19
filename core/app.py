@@ -8,8 +8,9 @@ from typing import Optional, List, Dict, Any
 import logging
 import structlog
 import psutil
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Depends, Security
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
 from core.config import settings
@@ -48,6 +49,24 @@ app = FastAPI(
 class AnalyzeResp(BaseModel):
     job_id: str
     status: str
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(api_key: str = Security(api_key_header)):
+    """Verify API key for protected endpoints"""
+    if not api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    
+    valid_keys = os.getenv("CORE_API_KEYS", "").split(",")
+    if not valid_keys or valid_keys == [""]:
+
+        log.warning("CORE_API_KEYS not configured, allowing all requests")
+        return api_key
+    
+    if api_key not in valid_keys:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    
+    return api_key
 
 
 @app.get("/mcp/descriptor")
@@ -150,7 +169,7 @@ def metrics():
 
 
 @app.get("/jobs")
-def list_jobs():
+def list_jobs(api_key: str = Depends(verify_api_key)):
     """List all analysis jobs"""
     jobs = []
     if settings.DATA_DIR.exists():
@@ -170,7 +189,7 @@ def list_jobs():
 
 
 @app.post("/analyze", response_model=AnalyzeResp)
-async def analyze(file: UploadFile = File(None), persist: bool = False, enable_refinement: bool = False):
+async def analyze(file: UploadFile = File(None), persist: bool = False, enable_refinement: bool = False, api_key: str = Depends(verify_api_key)):
     """Upload and analyze a binary file"""
     if file is None:
         raise HTTPException(status_code=400, detail="file is required")
@@ -188,7 +207,7 @@ class AnalyzeB64Req(BaseModel):
 
 
 @app.post("/analyze_b64", response_model=AnalyzeResp)
-async def analyze_b64(payload: AnalyzeB64Req):
+async def analyze_b64(payload: AnalyzeB64Req, api_key: str = Depends(verify_api_key)):
     """Upload and analyze a base64-encoded binary"""
     try:
         contents = b64decode(payload.file_b64)
@@ -207,7 +226,13 @@ def _launch_analysis(contents: bytes, filename: str, persist: bool, enable_refin
     proj_dir = settings.DATA_DIR / job_id
     proj_dir.mkdir(parents=True, exist_ok=True)
 
-    binary_path = proj_dir / filename
+
+    import os
+    safe_filename = os.path.basename(filename)
+    if not safe_filename or safe_filename != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename: path traversal detected")
+
+    binary_path = proj_dir / safe_filename
     binary_path.write_bytes(contents)
 
     out_dir = proj_dir / "artifacts"
@@ -368,8 +393,21 @@ def query(payload: Dict[str, Any] = Body(...)):
         if not q: return True
         if use_regex:
             try:
-                return re.search(q, text, re.IGNORECASE) is not None
+                import signal
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("Regex timeout")
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(5)
+                try:
+                    result = re.search(q, text, re.IGNORECASE) is not None
+                    signal.alarm(0) 
+                    return result
+                except TimeoutError:
+                    signal.alarm(0)  
+                    return False
             except re.error:
+                return False
+            except Exception:
                 return False
         return q.lower() in text.lower()
 

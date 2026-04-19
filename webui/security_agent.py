@@ -4,6 +4,10 @@ import requests
 import re
 from typing import Dict, Any, Generator, List
 from openai import OpenAI
+from rich.console import Console
+
+console = Console()
+
 from model import model_manager
 
 GHIDRA_API_BASE = "http://127.0.0.1:8000"
@@ -216,7 +220,7 @@ class SecurityAgent:
             try:
                 os.makedirs(self.security_dir)
             except OSError as e:
-                print(f"Error creating security directory: {e}")
+                console.print(f"[red]Error creating security directory: {e}[/red]")
                 self.security_dir = None
 
     def _get_security_file(self, job_id: str) -> str:
@@ -229,7 +233,7 @@ class SecurityAgent:
                 with open(security_file, 'r') as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Error loading security history: {e}")
+                console.print(f"[red]Error loading security history: {e}[/red]")
         return []
 
     def save_security_analysis(self, job_id: str, analysis: dict):
@@ -245,7 +249,7 @@ class SecurityAgent:
                 os.remove(security_file)
                 return True
             except IOError as e:
-                print(f"Error clearing security history: {e}")
+                console.print(f"[red]Error clearing security history: {e}[/red]")
                 return False
         return True
 
@@ -285,7 +289,6 @@ class SecurityAgent:
             return {"error": f"API call to {endpoint} failed: {str(e)}"}
 
     def _analyze_binary_security(self, job_id: str, file_type: str = "unknown", analysis_depth: str = "standard") -> Dict[str, Any]:
-        """Comprehensive security analysis"""
         analysis = {
             "job_id": job_id,
             "file_type": file_type,
@@ -313,7 +316,6 @@ class SecurityAgent:
         return analysis
 
     def _detect_memory_corruption(self, job_id: str, check_types: List[str] = None) -> Dict[str, Any]:
-        """Detect memory corruption vulnerabilities"""
         if check_types is None:
             check_types = ["buffer_overflow", "heap_overflow", "use_after_free"]
         
@@ -336,7 +338,6 @@ class SecurityAgent:
         return result
 
     def _scan_dangerous_apis(self, job_id: str, api_categories: List[str] = None) -> Dict[str, Any]:
-        """Scan for dangerous API usage"""
         if api_categories is None:
             api_categories = ["memory", "string", "file", "network"]
         
@@ -368,7 +369,6 @@ class SecurityAgent:
         return result
 
     def _analyze_control_flow(self, job_id: str, function_addr: str = None) -> Dict[str, Any]:
-        """Analyze control flow for vulnerabilities"""
         result = {"job_id": job_id, "control_flow_issues": []}
         
         functions = self._call_ghidra_api("list_functions", {"job_id": job_id, "limit": 50})
@@ -394,7 +394,6 @@ class SecurityAgent:
         return result
 
     def _check_input_validation(self, job_id: str, input_sources: List[str] = None) -> Dict[str, Any]:
-        """Check input validation mechanisms"""
         if input_sources is None:
             input_sources = ["user_input", "file", "network"]
         
@@ -426,7 +425,6 @@ class SecurityAgent:
         return result
 
     def _assess_privilege_escalation(self, job_id: str, target_privileges: List[str] = None) -> Dict[str, Any]:
-        """Assess privilege escalation vectors"""
         if target_privileges is None:
             target_privileges = ["admin", "system", "kernel"]
         
@@ -464,7 +462,6 @@ class SecurityAgent:
         return result
 
     def security_analysis_stream(self, user_message: str, job_id: str) -> Generator[str, None, None]:
-        """Stream security analysis response"""
         history = self.load_security_history(job_id)
         
         if not history:
@@ -493,7 +490,7 @@ class SecurityAgent:
                         try:
                             args = json.loads(tool_call.function.arguments)
                         except json.JSONDecodeError as e:
-                            print(f"JSON parsing error: {e}")
+                            console.print(f"[red]JSON parsing error: {e}[/red]")
                             args = {}
 
                         args['job_id'] = job_id
@@ -507,7 +504,6 @@ class SecurityAgent:
                             "content": json.dumps(tool_result)
                         })
 
-            # Get final response
             stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -533,7 +529,6 @@ class SecurityAgent:
             yield json.dumps({"type": "error", "content": f"Security Analysis Error: {str(e)}"})
 
     def generate_security_report(self, job_id: str) -> Dict[str, Any]:
-        """Generate comprehensive security report"""
         analysis = self.load_security_history(job_id)
         
         report = {

@@ -3,7 +3,7 @@
 .env.local
 .env.*.local
 
-
+.well-known/
 .venv
 venv/
 ENV/
@@ -37,15 +37,14 @@ webui/chats/
 
 data/
 instance/
-
+RD/
 dist/
 build/
 *.egg-info/
 .eggs/
 
-
+.session.json
 .dockerignore
-RD/
 
 *.gpr
 *.gzf

@@ -2,7 +2,7 @@ import jwt
 import hashlib
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, redirect
 from models import User, Session
 
 class AuthManager:
@@ -82,15 +82,19 @@ def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
-        
+
         if 'Authorization' in request.headers:
             auth_header = request.headers['Authorization']
             try:
                 token = auth_header.split(' ')[1]
             except IndexError:
                 return jsonify({'error': 'Invalid token format'}), 401
-        
+
         if not token:
+        
+            accept_header = request.headers.get('Accept', '')
+            if 'text/html' in accept_header:
+                return redirect('/login')
             return jsonify({'error': 'Token is missing'}), 401
         
         user_id = auth_manager.verify_token(token)
