@@ -226,19 +226,19 @@ r2_bridge = Radare2Bridge()
 r2_agent = Radare2AgentController(r2_bridge)
 
 
-try:
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from core.llm_refiner import get_refiner, initialize_refiner
-    console.print("[STARTUP] Pre-loading LLM refiner model...")
-    refiner_loaded = initialize_refiner()
-    if refiner_loaded:
-        console.print("[green][STARTUP] [OK] LLM refiner model loaded successfully[/green]")
-    else:
-        console.print("[yellow][STARTUP] [WARNING] LLM refiner model failed to load (will load on first use)[/yellow]")
-except Exception as e:
-    console.print(f"[red][STARTUP] [ERROR] Failed to pre-load LLM refiner: {e}[/red]")
+# try:
+#     import sys
+#     import os
+#     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+#     from core.llm_refiner import get_refiner, initialize_refiner
+#     console.print("[STARTUP] Pre-loading LLM refiner model...")
+#     refiner_loaded = initialize_refiner()
+#     if refiner_loaded:
+#         console.print("[green][STARTUP] [OK] LLM refiner model loaded successfully[/green]")
+#     else:
+#         console.print("[yellow][STARTUP] [WARNING] LLM refiner model failed to load (will load on first use)[/yellow]")
+# except Exception as e:
+#     console.print(f"[red][STARTUP] [ERROR] Failed to pre-load LLM refiner: {e}[/red]")
 
 
 session_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.session.json')

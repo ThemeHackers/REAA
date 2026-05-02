@@ -120,18 +120,25 @@ class ActiveREAgent:
                 container_binary_path = binary_path
 
             # NOTE: Frida runs on Windows host, not in Docker container
-            # So we use the ORIGINAL Windows path for Frida spawning
-            # The binary must be executable on Windows (or use Wine for Linux binaries)
+            # On Windows, .exe files run natively without Wine
+            # Wine is only needed inside Docker container for sandbox execution
             windows_binary_path = binary_path
 
+            # On Windows, never use Wine for Frida (Windows runs .exe natively)
+            import platform
+            use_wine = platform.system() != "Windows" and windows_binary_path.lower().endswith('.exe')
+
             # Spawn process with Frida using Windows path
-            if not self.frida.spawn_process(windows_binary_path):
+            if not self.frida.spawn_process(windows_binary_path, use_wine=use_wine):
                 log.warning("Failed to spawn with Frida, continuing with sandbox-only execution")
                 # Continue without Frida instrumentation
                 frida_available = False
             else:
                 frida_available = True
-                # Load Frida script after spawning
+                # Hook entry point to prevent premature process exit
+                self.frida.hook_entry_point()
+
+                # Load Frida script after spawning and hooking
                 if script_content:
                     script_result = self.frida.load_script(script_content)
                 else:
@@ -140,6 +147,9 @@ class ActiveREAgent:
 
                 if not script_result:
                     log.warning("Failed to load Frida script, continuing without instrumentation")
+
+                # Resume process to start execution
+                self.frida.resume_process()
 
             # Execute binary through sandbox (uses container path)
             result = self.active_re_service.execute_binary(str(job_id))

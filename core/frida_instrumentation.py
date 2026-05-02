@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import structlog
+import time
 from typing import Optional, Dict, Any, List, Callable, TYPE_CHECKING
 from pathlib import Path
 
@@ -32,6 +33,7 @@ class FridaInstrumentation:
         self.auto_reconnect = True
         self.max_reconnect_attempts = 3
         self.reconnect_delay = 2
+        self.current_pid = None
 
         if not FRIDA_AVAILABLE:
             log.warning("Frida not available, instrumentation will be disabled")
@@ -70,7 +72,7 @@ class FridaInstrumentation:
             log.error(f"Failed to attach to PID {pid}: {e}", exc_info=True)
             return False
 
-    def spawn_process(self, binary_path: str, args: List[str] = None) -> bool:
+    def spawn_process(self, binary_path: str, args: List[str] = None, use_wine: bool = False) -> bool:
         if not FRIDA_AVAILABLE or not self.device:
             return False
 
@@ -79,30 +81,71 @@ class FridaInstrumentation:
             if args:
                 cmd.extend(args)
 
+            if use_wine:
+                cmd = ["wine"] + cmd
+
+            log.info(f"Frida spawn cmd: {cmd}, use_wine: {use_wine}")
             pid = self.device.spawn(cmd)
             self.session = self.device.attach(pid)
-            self.device.resume(pid)
+            self.current_pid = pid
             log.info(f"Spawned and attached to process: {binary_path} (PID: {pid})")
             return True
         except Exception as e:
             log.error(f"Failed to spawn process {binary_path}: {e}", exc_info=True)
             return False
 
-    def load_script(self, script_content: str) -> Optional[Any]:
+    def resume_process(self) -> bool:
+        if not self.current_pid or not self.device:
+            log.error("No active process to resume")
+            return False
+
+        try:
+            self.device.resume(self.current_pid)
+            log.info(f"Resumed process (PID: {self.current_pid})")
+            return True
+        except Exception as e:
+            log.error(f"Failed to resume process: {e}", exc_info=True)
+            return False
+
+    def hook_entry_point(self) -> Optional[Any]:
+        if not self.session:
+            log.error("No active session, cannot hook entry point")
+            return None
+
+        entry_hook_script = """
+        var entry_point = Module.findBaseAddress(null).add(ptr(Process.findModuleByName(null).entry));
+        console.log("Entry point: " + entry_point);
+        
+        Interceptor.attach(entry_point, {
+            onEnter: function(args) {
+                console.log("[+] Process entry point reached, pausing execution");
+                send({type: 'entry_point_reached', address: entry_point.toString()});
+            }
+        });
+        """
+        
+        return self.load_script(entry_hook_script)
+
+    def load_script(self, script_content: str, max_retries: int = 3) -> Optional[Any]:
         if not self.session:
             log.error("No active session, cannot load script")
             return None
 
-        try:
-            script = self.session.create_script(script_content)
-            script.on('message', self._on_message)
-            script.load()
-            self.scripts.append(script)
-            log.info("Frida script loaded successfully")
-            return script
-        except Exception as e:
-            log.error(f"Failed to load Frida script: {e}", exc_info=True)
-            return None
+        for attempt in range(max_retries):
+            try:
+                script = self.session.create_script(script_content)
+                script.on('message', self._on_message)
+                script.load()
+                self.scripts.append(script)
+                log.info("Frida script loaded successfully")
+                return script
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    log.error(f"Failed to load Frida script after {max_retries} attempts: {e}", exc_info=True)
+                    return None
+                delay = 2 ** attempt
+                log.warning(f"Failed to load Frida script (attempt {attempt + 1}/{max_retries}), retrying in {delay}s: {e}")
+                time.sleep(delay)
 
     def load_script_file(self, script_path: str) -> Optional[Any]:
         script_file = Path(script_path)
