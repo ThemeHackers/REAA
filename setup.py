@@ -164,7 +164,7 @@ def check_setup_completed():
             border_style="green"
         ))
         console.print("\n[yellow]All components are installed. To force reinstall, delete .venv and .env files.[/yellow]")
-        response = input("\n[yellow]Continue with setup anyway? (y/n): [/yellow]")
+        response = console.input("\n[yellow]Continue with setup anyway? (y/n): [/yellow]")
         return response.lower() != 'y'
     elif completed_count > 0:
         console.print(f"[yellow]Setup partially completed ({completed_count}/{total_count} components). Continuing...[/yellow]")
