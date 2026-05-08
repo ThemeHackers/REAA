@@ -38,6 +38,7 @@ $(document).ready(function() {
         
         function deepMerge(target, source) {
             for (const key in source) {
+                if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
                 if (source[key] instanceof Object && key in target) {
                     deepMerge(target[key], source[key]);
                 } else {
@@ -67,12 +68,17 @@ $(document).ready(function() {
         const keys = path.split('.');
         let obj = userPreferences;
         for (let i = 0; i < keys.length - 1; i++) {
-            if (!(keys[i] in obj)) {
-                obj[keys[i]] = {};
+            const key = keys[i];
+            if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+            if (!(key in obj)) {
+                obj[key] = {};
             }
-            obj = obj[keys[i]];
+            obj = obj[key];
         }
-        obj[keys[keys.length - 1]] = value;
+        const lastKey = keys[keys.length - 1];
+        if (lastKey !== '__proto__' && lastKey !== 'constructor' && lastKey !== 'prototype') {
+            obj[lastKey] = value;
+        }
         savePreferences();
     }
 

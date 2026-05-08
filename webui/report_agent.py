@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import structlog
+import re
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pathlib import Path
@@ -448,7 +449,8 @@ TEMPORAL SCORE: {temporal_score}
         """Convert report to PDF format"""
         try:
             html_content = self._convert_to_html(report)
-            output_path = Path(settings.DATA_DIR) / f"{job_id}_report.html"
+            sanitized_job_id = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id))
+            output_path = Path(settings.DATA_DIR) / f"{sanitized_job_id}_report.html"
 
             output_path.write_text(html_content, encoding='utf-8')
 

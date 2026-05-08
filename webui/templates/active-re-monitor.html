@@ -249,7 +249,7 @@
         function logOutput(message) {
             const console = $('#output-console');
             const time = new Date().toLocaleTimeString();
-            console.append(`<p class="text-gray-300">[${time}] ${message}</p>`);
+            console.append($('<p class="text-gray-300"></p>').text(`[${time}] ${message}`));
             console.scrollTop(console[0].scrollHeight);
         }
 
@@ -359,7 +359,7 @@
                     select.empty();
                     select.append('<option value="">-- Select a job --</option>');
                     jobs.forEach(job => {
-                        select.append(`<option value="${job.id}">${job.filename || job.id}</option>`);
+                        select.append($('<option>').val(job.id).text(job.filename || job.id));
                     });
                 },
                 error: function(err) {
@@ -534,13 +534,16 @@
                 alertsContent.empty();
             }
             
+            const typeText = $('<div/>').text(alert.type || 'Alert').html();
+            const messageText = $('<div/>').text(alert.message || 'Suspicious activity detected').html();
+            
             alertsContent.prepend(`
                 <div class="alert-item bg-red-900/30 rounded-lg p-3">
                     <div class="flex justify-between">
-                        <span class="text-red-400 font-medium">${alert.type || 'Alert'}</span>
+                        <span class="text-red-400 font-medium">${typeText}</span>
                         <span class="text-gray-500 text-sm">${time}</span>
                     </div>
-                    <p class="text-gray-300 text-sm mt-1">${alert.message || 'Suspicious activity detected'}</p>
+                    <p class="text-gray-300 text-sm mt-1">${messageText}</p>
                 </div>
             `);
         }

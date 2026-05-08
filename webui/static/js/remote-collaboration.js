@@ -40,7 +40,9 @@ class RemoteCollaborationManager {
     }
 
     generateUserId() {
-        return 'user_' + Math.random().toString(36).substr(2, 9);
+        const array = new Uint32Array(3);
+        window.crypto.getRandomValues(array);
+        return 'user_' + Array.from(array, dec => dec.toString(36)).join('').substr(0, 9);
     }
     
     initializeEventListeners() {

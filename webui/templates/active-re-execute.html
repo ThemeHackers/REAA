@@ -197,7 +197,7 @@
         function logOutput(message) {
             const console = $('#output-console');
             const time = new Date().toLocaleTimeString();
-            console.append(`<p class="text-gray-300">[${time}] ${message}</p>`);
+            console.append($('<p class="text-gray-300"></p>').text(`[${time}] ${message}`));
             console.scrollTop(console[0].scrollHeight);
         }
 
@@ -296,7 +296,7 @@ console.log('[+] Memory monitoring script loaded');`
                     select.empty();
                     select.append('<option value="">-- Select a job --</option>');
                     jobs.forEach(job => {
-                        select.append(`<option value="${job.id}">${job.filename || job.id}</option>`);
+                        select.append($('<option>').val(job.id).text(job.filename || job.id));
                     });
                 },
                 error: function(err) {
