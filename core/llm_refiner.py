@@ -6,6 +6,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from pathlib import Path
 import ast
+import os
 import logging
 import structlog
 from typing import Optional, Dict, Any
@@ -36,6 +37,7 @@ class LLMRefiner:
         self.model = None
         self.device = None
         self._initialized = False
+        self._cpu_fallback = False
     
     def load_model(self) -> bool:
         """
@@ -73,21 +75,22 @@ class LLMRefiner:
             requested_dtype = dtype_map.get(dtype_str, torch.float16)
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
 
-            # Try configured device first, then CPU fallback for resilience.
+         
             candidate_devices = [self.device]
             if self.device == "cuda":
                 candidate_devices.append("cpu")
 
             last_error = None
+            self._cpu_fallback = False
             for candidate_device in candidate_devices:
                 candidate_dtype = requested_dtype
-                # float16 is usually unsupported/unstable on CPU for model loading.
+           
                 if candidate_device == "cpu" and candidate_dtype == torch.float16:
                     candidate_dtype = torch.float32
 
                 model_kwargs = {
                     "trust_remote_code": True,
-                    "torch_dtype": candidate_dtype,
+                    "dtype": candidate_dtype,
                 }
 
                 if candidate_device == "cuda":
@@ -122,8 +125,27 @@ class LLMRefiner:
             if self.model is None and last_error is not None:
                 raise last_error
 
+         
+            if self.device == "cpu" and device_setting != "cpu":
+                self._cpu_fallback = True
+            
+                total_cores = os.cpu_count() or 4
+                safe_threads = max(2, total_cores // 2)
+                torch.set_num_threads(safe_threads)
+                torch.set_num_interop_threads(max(1, safe_threads // 2))
+                log.warning(
+                    "⚠️  CUDA is NOT available — model loaded on CPU as fallback."
+                    " Performance will be significantly slower."
+                    f" CPU threads limited to {safe_threads}/{total_cores}"
+                    " to prevent system freeze."
+                    " Please check your CUDA/GPU driver installation."
+                )
+
             self._initialized = True
-            log.info(f"LLM refiner loaded successfully on {self.device}")
+            if self._cpu_fallback:
+                log.warning(f"LLM refiner loaded on CPU (fallback). CUDA was requested but unavailable.")
+            else:
+                log.info(f"LLM refiner loaded successfully on {self.device}")
             return True
 
         except Exception as e:
@@ -193,6 +215,17 @@ class LLMRefiner:
                     log.info(f"[DEBUG] self.device: {self.device}, inputs on CPU")
 
                 tokens_limit = max_new_tokens or settings.LLM4DECOMPILE_MAX_NEW_TOKENS
+
+          
+                if self._cpu_fallback:
+                    cpu_max = 512
+                    if tokens_limit > cpu_max:
+                        log.warning(
+                            f"CPU fallback: capping max_new_tokens from {tokens_limit} to {cpu_max}"
+                            " to prevent system freeze"
+                        )
+                        tokens_limit = cpu_max
+
                 log.info(f"[DEBUG] Starting model.generate with max_new_tokens: {tokens_limit}")
 
                 def handler(signum, frame):
@@ -304,7 +337,8 @@ class LLMRefiner:
             "device": self.device,
             "cuda_available": torch.cuda.is_available(),
             "initialized": self._initialized,
-            "model_path": self.model_path
+            "model_path": self.model_path,
+            "cpu_fallback": self._cpu_fallback,
         }
 
 
