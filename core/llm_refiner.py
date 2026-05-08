@@ -49,7 +49,6 @@ class LLMRefiner:
             return False
 
         try:
-       
             is_local = Path(self.model_path).exists()
 
             if is_local:
@@ -57,14 +56,12 @@ class LLMRefiner:
             else:
                 log.info(f"Loading LLM refiner model from HuggingFace: {self.model_path}")
 
-            
             device_setting = settings.LLM4DECOMPILE_DEVICE.lower()
             if device_setting == "auto":
                 self.device = "cuda" if torch.cuda.is_available() else "cpu"
             else:
                 self.device = device_setting
             log.info(f"Using device: {self.device}")
-
 
             dtype_str = settings.LLM4DECOMPILE_DTYPE.lower()
             dtype_map = {
@@ -73,37 +70,57 @@ class LLMRefiner:
                 "bfloat16": torch.bfloat16,
                 "float8": torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.float16,
             }
-            dtype = dtype_map.get(dtype_str, torch.float16)
-
-         
-            model_kwargs = {
-                "trust_remote_code": True,
-                "dtype": dtype,
-            }
-
-          
-            if self.device == "cuda":
-                model_kwargs["device_map"] = "auto"
-
-       
-            if settings.LLM4DECOMPILE_MAX_MEMORY:
-                model_kwargs["max_memory"] = self._safe_parse_dict_config(
-                    settings.LLM4DECOMPILE_MAX_MEMORY,
-                    "LLM4DECOMPILE_MAX_MEMORY"
-                )
-
-           
-            if settings.LLM4DECOMPILE_QUANTIZATION:
-                model_kwargs["quantization_config"] = self._safe_parse_dict_config(
-                    settings.LLM4DECOMPILE_QUANTIZATION,
-                    "LLM4DECOMPILE_QUANTIZATION"
-                )
-
+            requested_dtype = dtype_map.get(dtype_str, torch.float16)
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_path,
-                **model_kwargs
-            )
+
+            # Try configured device first, then CPU fallback for resilience.
+            candidate_devices = [self.device]
+            if self.device == "cuda":
+                candidate_devices.append("cpu")
+
+            last_error = None
+            for candidate_device in candidate_devices:
+                candidate_dtype = requested_dtype
+                # float16 is usually unsupported/unstable on CPU for model loading.
+                if candidate_device == "cpu" and candidate_dtype == torch.float16:
+                    candidate_dtype = torch.float32
+
+                model_kwargs = {
+                    "trust_remote_code": True,
+                    "torch_dtype": candidate_dtype,
+                }
+
+                if candidate_device == "cuda":
+                    model_kwargs["device_map"] = "auto"
+
+                if settings.LLM4DECOMPILE_MAX_MEMORY:
+                    model_kwargs["max_memory"] = self._safe_parse_dict_config(
+                        settings.LLM4DECOMPILE_MAX_MEMORY,
+                        "LLM4DECOMPILE_MAX_MEMORY"
+                    )
+
+                if settings.LLM4DECOMPILE_QUANTIZATION:
+                    model_kwargs["quantization_config"] = self._safe_parse_dict_config(
+                        settings.LLM4DECOMPILE_QUANTIZATION,
+                        "LLM4DECOMPILE_QUANTIZATION"
+                    )
+
+                try:
+                    self.model = AutoModelForCausalLM.from_pretrained(self.model_path, **model_kwargs)
+                    self.device = candidate_device
+                    break
+                except Exception as ex:
+                    last_error = ex
+                    log.warning(
+                        "Failed to load model on candidate device",
+                        candidate_device=candidate_device,
+                        candidate_dtype=str(candidate_dtype),
+                        error=str(ex),
+                    )
+                    self.model = None
+
+            if self.model is None and last_error is not None:
+                raise last_error
 
             self._initialized = True
             log.info(f"LLM refiner loaded successfully on {self.device}")
