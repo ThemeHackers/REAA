@@ -2884,7 +2884,7 @@
                                                     updateThinkingStep(currentToolStep, 'error');
                                                 }
                                                 addThinkingStep(`Error: ${data.content}`, 'error');
-                                                $responseContainer.html(`<div class="text-red-400">ERROR: ${data.content}</div>`);
+                                                $responseContainer.html(`<div class="text-red-400">ERROR: ${$('<div/>').text(data.content).html()}</div>`);
                                             }
                                         } catch (e) {
                                             console.error("Error parsing stream data:", e, "Data:", line);

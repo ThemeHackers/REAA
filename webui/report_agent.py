@@ -448,8 +448,10 @@ TEMPORAL SCORE: {temporal_score}
     def _convert_to_pdf(self, report: Dict[str, Any], job_id: str) -> str:
         """Convert report to PDF format"""
         try:
+            import os
             html_content = self._convert_to_html(report)
-            sanitized_job_id = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id))
+            safe_job_id = os.path.basename(str(job_id))
+            sanitized_job_id = re.sub(r'[^a-zA-Z0-9_-]', '', safe_job_id)
             output_path = Path(settings.DATA_DIR) / f"{sanitized_job_id}_report.html"
 
             output_path.write_text(html_content, encoding='utf-8')

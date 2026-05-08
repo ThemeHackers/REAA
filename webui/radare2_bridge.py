@@ -18,6 +18,7 @@ class Radare2Bridge:
     
     def __init__(self, r2_path: str = None):
         if r2_path:
+            r2_path = os.path.abspath(r2_path)
             self.r2_path = r2_path
             if os.path.exists(r2_path):
                 console.print(f"[cyan]Using custom radare2 path: {r2_path}[/cyan]")
@@ -149,6 +150,7 @@ class Radare2Bridge:
     
     def analyze_file(self, file_path: str) -> Dict[str, Any]:
         """Analyze a file using radare2"""
+        file_path = os.path.abspath(file_path)
         if not os.path.exists(file_path):
             return {"error": "File not found"}
         
@@ -182,6 +184,7 @@ class Radare2Bridge:
 
     def load_file_only(self, file_path: str) -> Dict[str, Any]:
         """Load file into radare2 without analysis - faster loading"""
+        file_path = os.path.abspath(file_path)
         if not os.path.exists(file_path):
             return {"error": "File not found"}
         

@@ -224,7 +224,8 @@ class SecurityAgent:
                 self.security_dir = None
 
     def _get_security_file(self, job_id: str) -> str:
-        sanitized_job_id = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id))
+        safe_job_id = os.path.basename(str(job_id))
+        sanitized_job_id = re.sub(r'[^a-zA-Z0-9_-]', '', safe_job_id)
         return os.path.join(self.security_dir, f"{sanitized_job_id}_security.json")
 
     def load_security_history(self, job_id: str) -> list:

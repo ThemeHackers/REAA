@@ -2323,6 +2323,8 @@ def get_memory_xref(job_id, address):
 def compare_memory_sections(job_id, section1, section2):
     try:
         import os
+        import re
+        job_id = re.sub(r'[^a-zA-Z0-9_-]', '', job_id)
 
         log.info(f"[Memory Compare] Called for job_id: {job_id}, sections: {section1} vs {section2}")
 
@@ -2459,6 +2461,7 @@ def search_memory_pattern(job_id):
     try:
         import os
         import re
+        job_id = re.sub(r'[^a-zA-Z0-9_-]', '', job_id)
         
         data = request.get_json()
         pattern = data.get('pattern', '')

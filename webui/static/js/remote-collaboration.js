@@ -178,7 +178,7 @@ class RemoteCollaborationManager {
         if (savedConnectionStatus === 'connected') {
             if (this.connectionMode === 'client') {
                 const savedUrl = localStorage.getItem('remote_server_url');
-                const savedApiKey = localStorage.getItem('remote_api_key');
+                const savedApiKey = sessionStorage.getItem('remote_api_key');
 
                 if (savedUrl) {
                     this.connectAsClient(savedUrl, null, savedApiKey);
@@ -198,7 +198,7 @@ class RemoteCollaborationManager {
         
         const savedUrl = localStorage.getItem('remote_server_url');
         const savedUsername = localStorage.getItem('remote_username');
-        const savedApiKey = localStorage.getItem('remote_api_key');
+        const savedApiKey = sessionStorage.getItem('remote_api_key');
         const savedMode = localStorage.getItem('remote_connection_mode');
         
         if (savedUrl) {
@@ -273,7 +273,8 @@ class RemoteCollaborationManager {
         }
 
         localStorage.setItem('remote_server_url', serverUrl);
-        localStorage.setItem('remote_api_key', apiKey);
+        // Note: API key stored in sessionStorage to limit exposure (cleared when browser tab closes)
+        sessionStorage.setItem('remote_api_key', apiKey);
         localStorage.setItem('remote_connection_mode', mode);
         
         this.connectionMode = mode;
@@ -626,7 +627,7 @@ class RemoteCollaborationManager {
         
         this.reconnectTimeout = setTimeout(() => {
             const savedUrl = localStorage.getItem('remote_server_url');
-            const savedApiKey = localStorage.getItem('remote_api_key');
+            const savedApiKey = sessionStorage.getItem('remote_api_key');
 
             if (savedUrl && this.connectionMode === 'client') {
                 this.connectAsClient(savedUrl, null, savedApiKey);
@@ -1107,6 +1108,7 @@ class RemoteCollaborationManager {
     }
     
     showToast(message, type = 'info') {
+        const escMsg = $('<div/>').text(message).html();
         const toast = $(`
             <div class="px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-in ${
                 type === 'success' ? 'bg-green-600' :
@@ -1114,7 +1116,7 @@ class RemoteCollaborationManager {
                 type === 'warning' ? 'bg-yellow-600' :
                 'bg-blue-600'
             } text-white">
-                ${message}
+                ${escMsg}
             </div>
         `);
         

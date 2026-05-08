@@ -634,7 +634,7 @@ function initTerminal(currentJobId) {
 
     function loadR2File(jobId) {
         const output = $('#r2-terminal-output');
-        output.append(`<div class="text-yellow-400">Loading file for job ${jobId}...</div>`);
+        output.append(`<div class="text-yellow-400">Loading file for job ${escapeHtml(jobId)}...</div>`);
         
         const token = localStorage.getItem('token');
         const headers = {
@@ -651,21 +651,21 @@ function initTerminal(currentJobId) {
                 if (data.success) {
                     r2CurrentJobId = jobId;
                     output.append('<div class="text-green-400">File loaded successfully into Radare2</div>');
-                    output.append(`<div class="text-gray-400">File: ${data.filename || 'unknown'}</div>`);
+                    output.append(`<div class="text-gray-400">File: ${escapeHtml(data.filename || 'unknown')}</div>`);
                     
                     if (data.entry_point) {
                         updateR2Prompt(data.entry_point);
-                        output.append(`<div class="text-gray-400">Entry point: ${data.entry_point}</div>`);
+                        output.append(`<div class="text-gray-400">Entry point: ${escapeHtml(data.entry_point)}</div>`);
                     } else if (data.base_address) {
                         updateR2Prompt(data.base_address);
-                        output.append(`<div class="text-gray-400">Base address: ${data.base_address}</div>`);
+                        output.append(`<div class="text-gray-400">Base address: ${escapeHtml(data.base_address)}</div>`);
                     }
                 } else {
-                    output.append(`<div class="text-red-400">Error: ${data.error}</div>`);
+                    output.append(`<div class="text-red-400">Error: ${escapeHtml(data.error)}</div>`);
                 }
             },
             error: function(xhr) {
-                output.append(`<div class="text-red-400">Error: ${xhr.responseJSON?.error || 'Failed to load file'}</div>`);
+                output.append(`<div class="text-red-400">Error: ${escapeHtml(xhr.responseJSON?.error || 'Failed to load file')}</div>`);
             }
         });
     }
@@ -708,11 +708,11 @@ function initTerminal(currentJobId) {
                         output.append(`<div class="whitespace-pre font-mono text-sm">${formattedOutput}</div>`);
                     }
                 } else {
-                    output.append(`<div class="text-red-400">Error: ${data.error}</div>`);
+                    output.append(`<div class="text-red-400">Error: ${escapeHtml(data.error)}</div>`);
                 }
             },
             error: function(xhr) {
-                output.append(`<div class="text-red-400">Error: ${xhr.responseJSON?.error || 'Command execution failed'}</div>`);
+                output.append(`<div class="text-red-400">Error: ${escapeHtml(xhr.responseJSON?.error || 'Command execution failed')}</div>`);
             }
         });
     }
@@ -824,7 +824,7 @@ function initTerminal(currentJobId) {
             },
             error: function(xhr) {
                 $(`#${loadingId}`).remove();
-                output.append(`<div class="text-red-400 mt-2">Analysis failed: ${xhr.responseJSON?.error || 'Unknown error'}</div>`);
+                output.append(`<div class="text-red-400 mt-2">Analysis failed: ${escapeHtml(xhr.responseJSON?.error || 'Unknown error')}</div>`);
                 output.scrollTop(output[0].scrollHeight);
             }
         });
@@ -931,7 +931,7 @@ function initTerminal(currentJobId) {
         $.get('/api/jobs', function(data) {
             output.append('<div class="text-gray-300">Jobs:</div>');
             data.jobs.forEach(job => {
-                output.append(`<div class="text-gray-400 ml-4">ID: ${job.id}, File: ${job.filename}, Status: ${job.status}</div>`);
+                output.append(`<div class="text-gray-400 ml-4">ID: ${escapeHtml(job.id)}, File: ${escapeHtml(job.filename)}, Status: ${escapeHtml(job.status)}</div>`);
             });
         }).fail(function(xhr) {
             output.append('<div class="text-red-400">Error: Failed to fetch jobs</div>');
@@ -940,11 +940,11 @@ function initTerminal(currentJobId) {
     function fetchJobStatus(jobId) {
         const output = $('#terminal-output');
         $.get(`/api/jobs/${jobId}/status`, function(data) {
-            output.append(`<div class="text-gray-300">Job ${jobId} Status:</div>`);
-            output.append(`<div class="text-gray-400 ml-4">Progress: ${data.progress}%</div>`);
-            output.append(`<div class="text-gray-400 ml-4">Status: ${data.status}</div>`);
+            output.append(`<div class="text-gray-300">Job ${escapeHtml(jobId)} Status:</div>`);
+            output.append(`<div class="text-gray-400 ml-4">Progress: ${escapeHtml(String(data.progress))}%</div>`);
+            output.append(`<div class="text-gray-400 ml-4">Status: ${escapeHtml(data.status)}</div>`);
             if (data.message) {
-                output.append(`<div class="text-gray-400 ml-4">Message: ${data.message}</div>`);
+                output.append(`<div class="text-gray-400 ml-4">Message: ${escapeHtml(data.message)}</div>`);
             }
         }).fail(function(xhr) {
             output.append('<div class="text-red-400">Error: Failed to fetch job status</div>');
@@ -957,7 +957,7 @@ function initTerminal(currentJobId) {
     }
     function exportResults(jobId) {
         const output = $('#terminal-output');
-        output.append(`<div class="text-gray-300">Exporting results for job: ${jobId}</div>`);
+        output.append(`<div class="text-gray-300">Exporting results for job: ${escapeHtml(jobId)}</div>`);
         output.append('<div class="text-yellow-400">Export not yet implemented</div>');
     }
     function clearTerminal() {
